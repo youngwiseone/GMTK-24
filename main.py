@@ -10,6 +10,8 @@ SCREEN_HEIGHT = 720
 TILE_SIZE = 32
 ROWS = SCREEN_HEIGHT // TILE_SIZE
 COLS = SCREEN_WIDTH // TILE_SIZE
+LOG_HEALTH = 100
+LEVEL = 1
 
 # Set up the display
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -20,41 +22,137 @@ background_tile = pygame.image.load("Assets/sky.png").convert()
 log_back_tile = pygame.image.load("Assets/log_back.png").convert()
 log_middle_tile = pygame.image.load("Assets/log_middle.png").convert()
 log_front_tile = pygame.image.load("Assets/log_front.png").convert()
+player_image = pygame.image.load("Assets/player.png").convert()
 
 # Chroma key: make black (0, 0, 0) transparent
 log_back_tile.set_colorkey((0, 0, 0))
 log_middle_tile.set_colorkey((0, 0, 0))
 log_front_tile.set_colorkey((0, 0, 0))
+player_image.set_colorkey((0, 0, 0))
 
-# Function to place a log (all three parts)
-def place_log(x, y):
-    # Place log_back.png at the top
-    screen.blit(log_back_tile, (x, y - TILE_SIZE))
-    # Place log_middle.png in the middle
-    screen.blit(log_middle_tile, (x, y))
-    # Place log_front.png at the bottom
-    screen.blit(log_front_tile, (x, y + TILE_SIZE))
+# Log class to handle each log object
+class Log:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.health = LOG_HEALTH * LEVEL
+
+    def draw(self):
+        # Place log_back.png at the top
+        screen.blit(log_back_tile, (self.x, self.y - TILE_SIZE))
+        # Place log_middle.png in the middle
+        screen.blit(log_middle_tile, (self.x, self.y))
+        # Place log_front.png at the bottom
+        screen.blit(log_front_tile, (self.x, self.y + TILE_SIZE))
+
+        # Draw the health bar above the log
+        font = pygame.font.SysFont(None, 24)
+        health_text = font.render(str(self.health), True, (255, 255, 255))
+        screen.blit(health_text, (self.x, self.y - TILE_SIZE * 2))
+
+    def update(self, logs):
+        # Check if there are logs on both sides
+        has_left_log = any(log.x == self.x - TILE_SIZE and log.y == self.y for log in logs)
+        has_right_log = any(log.x == self.x + TILE_SIZE and log.y == self.y for log in logs)
+    
+        # Only decrease health if there isn't a log on both sides
+        if not (has_left_log and has_right_log):
+            self.health -= 1
+
+        # Ensure health doesn't go below 0
+        if self.health < 0:
+            self.health = 0
+
+    def is_destroyed(self):
+        # Check if the log is destroyed (health reaches 0)
+        return self.health == 0
+
+# Player class to handle the player object
+class Player:
+    def __init__(self, x, y):
+        self.image = player_image
+        self.x = x
+        self.y = y
+
+    def move(self, direction, logs):
+        # Calculate the new position
+        if direction == "left":
+            new_x = self.x - TILE_SIZE
+        elif direction == "right":
+            new_x = self.x + TILE_SIZE
+        else:
+            return
+
+        # Check if there is a log at the new position
+        if self.can_stand_on_log(new_x, logs):
+            self.x = new_x
+
+    def can_stand_on_log(self, x, logs):
+        # Check if there is a log at the given x coordinate and current y
+        for log in logs:
+            if log.x == x and log.y == self.y and not log.is_destroyed():
+                return True
+        return False
+
+    def update(self, logs):
+        # Check if the log the player is standing on is destroyed
+        if not self.can_stand_on_log(self.x, logs):
+            # Make the player fall down one tile space
+            self.y += TILE_SIZE
+            # If the player is no longer on a log, delete the player
+            if not self.can_stand_on_log(self.x, logs):
+                return True
+        return False
+
+    def draw(self):
+        screen.blit(self.image, (self.x, self.y))
 
 # Main game loop
 running = True
+logs = []
+
+# Create and add 3 logs spaced horizontally
+logs.append(Log(center_x := (COLS // 2) * TILE_SIZE, center_y := (ROWS // 2) * TILE_SIZE))
+logs.append(Log(center_x + TILE_SIZE, center_y))
+logs.append(Log(center_x - TILE_SIZE, center_y))
+
+# Create the player and place it on the first log
+player = Player(center_x, center_y - TILE_SIZE)
+
 while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_LEFT:
+                player.move("left", logs)
+            elif event.key == pygame.K_RIGHT:
+                player.move("right", logs)
 
     # Fill the screen with the background tile (sky.png)
     for row in range(ROWS):
         for col in range(COLS):
             screen.blit(background_tile, (col * TILE_SIZE, row * TILE_SIZE))
 
-    # Place a log at a specific location (center of the screen)
-    center_x = (COLS // 2) * TILE_SIZE
-    center_y = (ROWS // 2) * TILE_SIZE
-    place_log(center_x, center_y)
-    place_log(center_x + TILE_SIZE, center_y)
+    # Update and draw all logs
+    for log in logs[:]:
+        log.update(logs)
+        log.draw()
+        if log.is_destroyed():
+            logs.remove(log)
+
+
+    # Update and draw the player
+    if player.update(logs):
+        player = None  # Delete the player if they fall off the log
+    if player:
+        player.draw()
 
     # Update the display
     pygame.display.flip()
+
+    # Control the frame rate
+    pygame.time.delay(100)  # Delay to slow down health decrease
 
 # Quit Pygame
 pygame.quit()
