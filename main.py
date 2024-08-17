@@ -160,9 +160,9 @@ while running:
         if event.type == pygame.QUIT:
             running = False
         elif event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_LEFT:
+            if event.key == pygame.K_LEFT or event.key == pygame.K_a:
                 player.move("left", logs)
-            elif event.key == pygame.K_RIGHT:
+            elif event.key == pygame.K_RIGHT or event.key == pygame.K_d:
                 player.move("right", logs)
             elif event.key == pygame.K_f:
                 wood.add_stock(5)  # Add 5 wood to the current stock
@@ -173,6 +173,22 @@ while running:
                         if wood.current_stock >= 5:
                             wood.remove_stock(5)  # Use 5 wood
                             log.restore_health(50)  # Restore 50 health to the log
+            elif event.key == pygame.K_e:
+                # Check if the player has at least 10 wood
+                if wood.current_stock >= 10:
+                    # Determine if there is space to the left or right of the current log
+                    can_build_left = not any(log.x == player.x - TILE_SIZE for log in logs)
+                    can_build_right = not any(log.x == player.x + TILE_SIZE for log in logs)
+
+                    # Build the log if there is space
+                    if can_build_left or can_build_right:
+                        wood.remove_stock(10)  # Subtract 10 wood from the stock
+
+                        if can_build_left:
+                            logs.append(Log(player.x - TILE_SIZE, player.y, 1))
+                        elif can_build_right:
+                            logs.append(Log(player.x + TILE_SIZE, player.y, 1))
+
 
     # Fill the screen with the background tile (sky.png)
     for row in range(ROWS):
