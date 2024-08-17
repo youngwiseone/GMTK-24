@@ -18,6 +18,14 @@ STARTING_RESOURCES = 0
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 pygame.display.set_caption("Build to Sail - Raft Game")
 
+pygame.mixer.init()
+
+# Load sounds
+log_break_sound = pygame.mixer.Sound("Assets/Sounds/log_break.wav")
+barrel_select_sound = pygame.mixer.Sound("Assets/Sounds/barrel_select.wav")
+pygame.mixer.music.load("Assets/Sounds/background_music.wav")
+pygame.mixer.music.play(-1)
+
 # Load images from the Assets folder
 background_tile = pygame.image.load("Assets/sea.png").convert()
 log_back_tile = pygame.image.load("Assets/log_back.png").convert()
@@ -202,6 +210,16 @@ def show_resource_selection_menu():
 running = True
 logs = []
 barrels = []
+# Initialize background tiles
+background_tiles = []
+
+# Fill the screen with the initial background tiles
+for row in range(ROWS):
+    for col in range(COLS):
+        background_tiles.append(pygame.Rect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE))
+
+background_speed = 2  # Speed at which the background moves
+background_moving = True  # Track if the background is moving
 
 # Create resources
 wood = Resource("wood", SCREEN_WIDTH // 2 - TILE_SIZE, TILE_SIZE, STARTING_RESOURCES, 100, wood_tile)
@@ -256,6 +274,7 @@ while running:
                         selected_resource = show_resource_selection_menu()
                         # Place the barrel on the log
                         barrels.append(Barrel(log.x, log.y - TILE_SIZE, barrel_tile, log, selected_resource))
+                        barrel_select_sound.play()
                         log.has_empty_spot = False
                         # Increase the max limit of the selected resource
                         if selected_resource == "wood":
@@ -264,10 +283,23 @@ while running:
                             metal.max_stock += 50
                         break
 
-    # Fill the screen with the background tile (sky.png)
-    for row in range(ROWS):
-        for col in range(COLS):
-            screen.blit(background_tile, (col * TILE_SIZE, row * TILE_SIZE))
+    # Move background tiles
+    if background_moving:
+        for tile in background_tiles:
+            tile.x -= background_speed
+
+        # Remove tiles that move off the screen
+        background_tiles = [tile for tile in background_tiles if tile.x + TILE_SIZE > 0]
+
+        # Spawn new tiles on the right side
+        last_col_x = max(tile.x for tile in background_tiles) + TILE_SIZE
+        if len([tile for tile in background_tiles if tile.x == last_col_x]) < ROWS:
+            for row in range(ROWS):
+                background_tiles.append(pygame.Rect(last_col_x, row * TILE_SIZE, TILE_SIZE, TILE_SIZE))
+
+    # Draw the background tiles
+    for tile in background_tiles:
+        screen.blit(background_tile, tile)
 
     # Draw the resource
     wood.draw()
@@ -279,6 +311,7 @@ while running:
         log.draw()
         if log.is_destroyed():
             logs.remove(log)
+            log_break_sound.play()  # Play the sound when the log is removed
             # Remove any barrels on this log and reduce the resource max
             for barrel in barrels[:]:
                 if barrel.log == log:
