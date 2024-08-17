@@ -24,14 +24,18 @@ log_back_tile = pygame.image.load("Assets/log_back.png").convert()
 log_middle_tile = pygame.image.load("Assets/log_middle.png").convert()
 log_front_tile = pygame.image.load("Assets/log_front.png").convert()
 player_image = pygame.image.load("Assets/player.png").convert()
-wood_image = pygame.image.load("Assets/wood.png").convert()
+wood_tile = pygame.image.load("Assets/wood.png").convert()
+metal_tile = pygame.image.load("Assets/metal.png").convert()
+barrel_tile = pygame.image.load("Assets/barrel.png").convert()
 
 # Chroma key: make black (0, 0, 0) transparent
 log_back_tile.set_colorkey((0, 0, 0))
 log_middle_tile.set_colorkey((0, 0, 0))
 log_front_tile.set_colorkey((0, 0, 0))
 player_image.set_colorkey((0, 0, 0))
-wood_image.set_colorkey((0, 0, 0))
+wood_tile.set_colorkey((0, 0, 0))
+metal_tile.set_colorkey((0, 0, 0))
+barrel_tile.set_colorkey((0, 0, 0))
 
 # Resources
 class Resource:
@@ -66,6 +70,7 @@ class Log:
         self.y = y
         self.level = level
         self.health = LOG_HEALTH * self.level
+        self.has_empty_spot = True
 
     def draw(self):
         # Place log_back.png at the top
@@ -140,15 +145,70 @@ class Player:
     def draw(self):
         screen.blit(self.image, (self.x, self.y - TILE_SIZE))
 
+class Barrel:
+    def __init__(self, x, y, sprite, log, resource_type):
+        self.x = x
+        self.y = y
+        self.log = log 
+        self.sprite = sprite
+        self.resource_type = resource_type
+
+    def draw(self):
+        screen.blit(self.sprite, (self.x, self.y))
+        # Draw the resource tile on the barrel
+        if self.resource_type == "wood":
+            resource_sprite = wood_tile
+        elif self.resource_type == "metal":
+            resource_sprite = metal_tile
+        else:
+            resource_sprite = None
+
+        if resource_sprite:
+            screen.blit(resource_sprite, (self.x, self.y))
+
+def show_resource_selection_menu():
+    # Draw the menu background
+    menu_width, menu_height = 200, 150
+    menu_x = SCREEN_WIDTH // 2 - menu_width // 2
+    menu_y = SCREEN_HEIGHT // 2 - menu_height // 2
+    pygame.draw.rect(screen, (0, 0, 0), (menu_x, menu_y, menu_width, menu_height))
+
+    # Draw the options
+    font = pygame.font.SysFont(None, 24)
+    wood_option = font.render("Add 50 to Wood Max", True, (255, 255, 255))
+    metal_option = font.render("Add 50 to Metal Max", True, (255, 255, 255))
+    
+    screen.blit(wood_option, (menu_x + 20, menu_y + 20))
+    screen.blit(metal_option, (menu_x + 20, menu_y + 60))
+
+    # Refresh display to show the menu
+    pygame.display.flip()
+
+    # Wait for player to select an option
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                mouse_x, mouse_y = event.pos
+                if menu_x < mouse_x < menu_x + menu_width:
+                    if menu_y < mouse_y < menu_y + 40:
+                        return "wood"
+                    elif menu_y + 40 < mouse_y < menu_y + 80:
+                        return "metal"
+
 # Main game loop
 running = True
 logs = []
+barrels = []
 
-# Create a wood resource
-wood = Resource("wood", SCREEN_WIDTH // 2 - TILE_SIZE // 2, TILE_SIZE, STARTING_RESOURCES, 100, wood_image)
+# Create resources
+wood = Resource("wood", SCREEN_WIDTH // 2 - TILE_SIZE, TILE_SIZE, STARTING_RESOURCES, 100, wood_tile)
+metal = Resource("metal", SCREEN_WIDTH // 2 + TILE_SIZE, TILE_SIZE, STARTING_RESOURCES, 100, metal_tile)
 
 # Create and add 3 logs spaced horizontally
-logs.append(Log(center_x := (COLS // 2) * TILE_SIZE, center_y := (ROWS // 2) * TILE_SIZE, 1))
+logs.append(Log(center_x := (COLS // 2) * TILE_SIZE, center_y := (ROWS // 2) * TILE_SIZE, 4))
 logs.append(Log(center_x + TILE_SIZE, center_y, 2))
 logs.append(Log(center_x - TILE_SIZE, center_y, 1))
 
@@ -188,7 +248,21 @@ while running:
                             logs.append(Log(player.x - TILE_SIZE, player.y, 1))
                         elif can_build_right:
                             logs.append(Log(player.x + TILE_SIZE, player.y, 1))
-
+            elif event.key == pygame.K_b:
+                # Check if the log under the player has an empty spot for a barrel
+                for log in logs:
+                    if log.x == player.x and log.has_empty_spot:
+                        # Show the resource selection menu
+                        selected_resource = show_resource_selection_menu()
+                        # Place the barrel on the log
+                        barrels.append(Barrel(log.x, log.y - TILE_SIZE, barrel_tile, log, selected_resource))
+                        log.has_empty_spot = False
+                        # Increase the max limit of the selected resource
+                        if selected_resource == "wood":
+                            wood.max_stock += 50
+                        elif selected_resource == "metal":
+                            metal.max_stock += 50
+                        break
 
     # Fill the screen with the background tile (sky.png)
     for row in range(ROWS):
@@ -197,6 +271,7 @@ while running:
 
     # Draw the resource
     wood.draw()
+    metal.draw()
 
     # Update and draw all logs
     for log in logs[:]:
@@ -204,6 +279,18 @@ while running:
         log.draw()
         if log.is_destroyed():
             logs.remove(log)
+            # Remove any barrels on this log and reduce the resource max
+            for barrel in barrels[:]:
+                if barrel.log == log:
+                    if barrel.resource_type == "wood":
+                        wood.max_stock -= 50  # Decrease the max stock of wood by 50
+                    if barrel.resource_type == "metal":
+                        metal.max_stock -= 50  # Decrease the max stock of wood by 50
+                    barrels.remove(barrel)
+
+    # Draw all barrels
+    for barrel in barrels:
+        barrel.draw()
 
 
     # Update and draw the player
