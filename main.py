@@ -23,7 +23,10 @@ pygame.mixer.init()
 # Load sounds
 log_break_sound = pygame.mixer.Sound("Assets/Sounds/log_break.wav")
 barrel_select_sound = pygame.mixer.Sound("Assets/Sounds/barrel_select.wav")
+player_move_sound = pygame.mixer.Sound("Assets/Sounds/slime_jump.wav")
+player_move_sound.set_volume(0.1)
 pygame.mixer.music.load("Assets/Sounds/background_music.wav")
+pygame.mixer.music.set_volume(0.2)
 pygame.mixer.music.play(-1)
 
 # Load images from the Assets folder
@@ -31,10 +34,11 @@ background_tile = pygame.image.load("Assets/sea.png").convert()
 log_back_tile = pygame.image.load("Assets/log_back.png").convert()
 log_middle_tile = pygame.image.load("Assets/log_middle.png").convert()
 log_front_tile = pygame.image.load("Assets/log_front.png").convert()
-player_image = pygame.image.load("Assets/player.png").convert()
+player_image = pygame.image.load("Assets/slime.png").convert()
 wood_tile = pygame.image.load("Assets/wood.png").convert()
 metal_tile = pygame.image.load("Assets/metal.png").convert()
 barrel_tile = pygame.image.load("Assets/barrel.png").convert()
+add_tile = pygame.image.load("Assets/add.png").convert()
 
 # Chroma key: make black (0, 0, 0) transparent
 log_back_tile.set_colorkey((0, 0, 0))
@@ -44,6 +48,7 @@ player_image.set_colorkey((0, 0, 0))
 wood_tile.set_colorkey((0, 0, 0))
 metal_tile.set_colorkey((0, 0, 0))
 barrel_tile.set_colorkey((0, 0, 0))
+add_tile.set_colorkey((0, 0, 0))
 
 # Resources
 class Resource:
@@ -80,7 +85,7 @@ class Log:
         self.health = LOG_HEALTH * self.level
         self.has_empty_spot = True
 
-    def draw(self):
+    def draw(self, player):
         # Place log_back.png at the top
         screen.blit(log_back_tile, (self.x, self.y - TILE_SIZE))
         # Place log_middle.png in the middle
@@ -92,6 +97,10 @@ class Log:
         font = pygame.font.SysFont(None, 24)
         health_text = font.render(str(self.health), True, (255, 255, 255))
         screen.blit(health_text, (self.x, self.y - TILE_SIZE * 2))
+
+        # Only draw the add_tile if this is the log the player is on and it has an empty spot
+        if self.has_empty_spot and self.x == player.x and self.y == player.y:
+            screen.blit(add_tile, (self.x, self.y - TILE_SIZE))
 
     def update(self, logs):
         # Check if there are logs on both sides
@@ -240,8 +249,10 @@ while running:
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_LEFT or event.key == pygame.K_a:
                 player.move("left", logs)
+                player_move_sound.play()
             elif event.key == pygame.K_RIGHT or event.key == pygame.K_d:
                 player.move("right", logs)
+                player_move_sound.play()
             elif event.key == pygame.K_f:
                 wood.add_stock(5)  # Add 5 wood to the current stock
             elif event.key == pygame.K_SPACE:
@@ -266,21 +277,26 @@ while running:
                             logs.append(Log(player.x - TILE_SIZE, player.y, 1))
                         elif can_build_right:
                             logs.append(Log(player.x + TILE_SIZE, player.y, 1))
-            elif event.key == pygame.K_b:
-                # Check if the log under the player has an empty spot for a barrel
-                for log in logs:
-                    if log.x == player.x and log.has_empty_spot:
+        # Separate MOUSEBUTTONDOWN handling
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            mouse_x, mouse_y = event.pos
+            for log in logs:
+                # Check if the click is on the add_tile and the log has an empty spot
+                if log.has_empty_spot and log.x <= mouse_x <= log.x + TILE_SIZE and log.y - TILE_SIZE <= mouse_y <= log.y:
+                    if log.x == player.x and log.y == player.y:  # Ensure the player is on the log
                         # Show the resource selection menu
                         selected_resource = show_resource_selection_menu()
-                        # Place the barrel on the log
+
+                        # Place the barrel on the log with the selected resource type
                         barrels.append(Barrel(log.x, log.y - TILE_SIZE, barrel_tile, log, selected_resource))
-                        barrel_select_sound.play()
-                        log.has_empty_spot = False
+                        log.has_empty_spot = False  # Mark the spot as used
+
                         # Increase the max limit of the selected resource
                         if selected_resource == "wood":
                             wood.max_stock += 50
                         elif selected_resource == "metal":
                             metal.max_stock += 50
+
                         break
 
     # Move background tiles
@@ -308,7 +324,7 @@ while running:
     # Update and draw all logs
     for log in logs[:]:
         log.update(logs)
-        log.draw()
+        log.draw(player)
         if log.is_destroyed():
             logs.remove(log)
             log_break_sound.play()  # Play the sound when the log is removed
