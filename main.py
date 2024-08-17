@@ -128,6 +128,18 @@ class Player:
         self.image = player_image
         self.x = x
         self.y = y
+        self.target_x = None
+        self.start_x = None
+        self.progress = 0
+        self.speed = 0.4  # Speed attribute for sliding
+
+        # Load animation frames
+        self.animation_frames = [
+            pygame.image.load(f"Assets/slime_jump{i}.png").convert_alpha()
+            for i in range(1, 7)
+        ]
+        self.current_frame = 0
+        self.frame_count = len(self.animation_frames)
 
     def move(self, direction, logs):
         # Calculate the new position
@@ -140,7 +152,9 @@ class Player:
 
         # Check if there is a log at the new position
         if self.can_stand_on_log(new_x, logs):
-            self.x = new_x
+            self.start_x = self.x  # Record the starting x position
+            self.target_x = new_x  # Set the target x position
+            self.progress = 0
 
     def can_stand_on_log(self, x, logs):
         # Check if there is a log at the given x coordinate and current y
@@ -150,6 +164,11 @@ class Player:
         return False
 
     def update(self, logs):
+        # Perform sliding if there is a target position
+        if self.target_x is not None:
+            self.perform_slide()
+            return
+
         # Check if the log the player is standing on is destroyed
         if not self.can_stand_on_log(self.x, logs):
             # Make the player fall down one tile space
@@ -157,10 +176,46 @@ class Player:
             # If the player is no longer on a log, delete the player
             if not self.can_stand_on_log(self.x, logs):
                 return True
+            
+        if self.target_x is None:
+            self.current_frame = 0  # Reset animation frame to 0 when idle
+            
         return False
+    
+    def start_slide(self, target_x):
+        # Initiates the slide animation.
+        self.sliding = True
+        self.slide_target_x = target_x
+        self.slide_start_x = self.x
+        self.slide_progress = 0
+
+    def perform_slide(self):
+        if self.target_x is None:
+            return
+
+        self.progress += self.speed  # Increase progress based on speed
+
+        # Apply easing (quadratic easing)
+        easing_progress = self.ease_in_out(self.progress)
+
+        # Interpolate the x position
+        self.x = self.start_x + (self.target_x - self.start_x) * easing_progress
+
+        # End the slide when progress is complete
+        if self.progress >= 1:
+            self.x = self.target_x
+            self.target_x = None
+        
+        # Update the calculation of the current animation frame in the perform_slide method
+        self.current_frame = int(self.progress * self.frame_count) % self.frame_count
+
+    def ease_in_out(self, t):
+        return 3 * t**2 - 2 * t**3  # Smooth start and end
 
     def draw(self):
-        screen.blit(self.image, (self.x, self.y - TILE_SIZE))
+        frame_image = self.animation_frames[self.current_frame]
+        screen.blit(frame_image, (self.x, self.y - TILE_SIZE))
+
 
 class Barrel:
     def __init__(self, x, y, sprite, log, resource_type):
@@ -290,6 +345,7 @@ while running:
                         # Place the barrel on the log with the selected resource type
                         barrels.append(Barrel(log.x, log.y - TILE_SIZE, barrel_tile, log, selected_resource))
                         log.has_empty_spot = False  # Mark the spot as used
+                        barrel_select_sound.play()
 
                         # Increase the max limit of the selected resource
                         if selected_resource == "wood":
