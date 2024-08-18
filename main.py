@@ -45,6 +45,29 @@ barrel_tile = pygame.image.load("Assets/barrel.png").convert()
 add_tile = pygame.image.load("Assets/add.png").convert()
 water_splash_tile = pygame.image.load("Assets/water_splash.png").convert()
 
+#Load log images
+log_back_images = [
+    pygame.image.load("Assets/Animations/Logs/log_back1.png").convert_alpha(),  # 100%-80%
+    pygame.image.load("Assets/Animations/Logs/log_back2.png").convert_alpha(),  # 80%-60%
+    pygame.image.load("Assets/Animations/Logs/log_back3.png").convert_alpha(),  # 60%-40%
+    pygame.image.load("Assets/Animations/Logs/log_back4.png").convert_alpha(),  # 40%-20%
+    pygame.image.load("Assets/Animations/Logs/log_back5.png").convert_alpha()   # 20%-0%
+]
+log_middle_images = [
+    pygame.image.load("Assets/Animations/Logs/log_middle1.png").convert_alpha(),  # 100%-80%
+    pygame.image.load("Assets/Animations/Logs/log_middle2.png").convert_alpha(),  # 80%-60%
+    pygame.image.load("Assets/Animations/Logs/log_middle3.png").convert_alpha(),  # 60%-40%
+    pygame.image.load("Assets/Animations/Logs/log_middle4.png").convert_alpha(),  # 40%-20%
+    pygame.image.load("Assets/Animations/Logs/log_middle5.png").convert_alpha()   # 20%-0%
+]
+log_front_images = [
+    pygame.image.load("Assets/Animations/Logs/log_front1.png").convert_alpha(),  # 100%-80%
+    pygame.image.load("Assets/Animations/Logs/log_front2.png").convert_alpha(),  # 80%-60%
+    pygame.image.load("Assets/Animations/Logs/log_front3.png").convert_alpha(),  # 60%-40%
+    pygame.image.load("Assets/Animations/Logs/log_front4.png").convert_alpha(),  # 40%-20%
+    pygame.image.load("Assets/Animations/Logs/log_front5.png").convert_alpha()   # 20%-0%
+]
+
 # Chroma key: make black (0, 0, 0) transparent
 log_back_tile.set_colorkey((0, 0, 0))
 log_middle_tile.set_colorkey((0, 0, 0))
@@ -88,16 +111,64 @@ class Log:
         self.x = x
         self.y = y
         self.level = level
-        self.health = LOG_HEALTH * self.level
+        self.max_health = LOG_HEALTH * self.level
+        self.health = self.max_health
         self.has_empty_spot = True
+        self.log_back_images  = log_back_images
+        self.log_middle_images = log_middle_images
+        self.log_front_images = log_front_images
+
+    def get_log_back_image(self, part):
+        # Calculate the health percentage
+        health_percentage = self.health / self.max_health
+
+        # Determine which image to use based on the health percentage
+        if part == "back":
+            if health_percentage >= 0.8:
+                return self.log_back_images[0]
+            elif health_percentage >= 0.6:
+                return self.log_back_images[1]  # 80%-60%
+            elif health_percentage >= 0.4:
+                return self.log_back_images[2]  # 60%-40%
+            elif health_percentage >= 0.2:
+                return self.log_back_images[3]  # 40%-20%
+            else:
+                return self.log_back_images[4]  # 20%-0%
+        elif part == "middle":
+            if health_percentage >= 0.8:
+                return self.log_middle_images[0]
+            elif health_percentage >= 0.6:
+                return self.log_middle_images[1]  # 80%-60%
+            elif health_percentage >= 0.4:
+                return self.log_middle_images[2]  # 60%-40%
+            elif health_percentage >= 0.2:
+                return self.log_middle_images[3]  # 40%-20%
+            else:
+                return self.log_middle_images[4]  # 20%-0%
+        elif part == "front":
+            if health_percentage >= 0.8:
+                return self.log_front_images[0]
+            elif health_percentage >= 0.6:
+                return self.log_front_images[1]  # 80%-60%
+            elif health_percentage >= 0.4:
+                return self.log_front_images[2]  # 60%-40%
+            elif health_percentage >= 0.2:
+                return self.log_front_images[3]  # 40%-20%
+            else:
+                return self.log_front_images[4]  # 20%-0%
 
     def draw(self, player):
+        # Determine the correct log_back image
+        log_back_image = self.get_log_back_image("back")
+        log_middle_image = self.get_log_back_image("middle")
+        log_front_image = self.get_log_back_image("front")
+
         # Place log_back.png at the top
-        screen.blit(log_back_tile, (self.x, self.y - TILE_SIZE))
+        screen.blit(log_back_image, (self.x, self.y - TILE_SIZE))
         # Place log_middle.png in the middle
-        screen.blit(log_middle_tile, (self.x, self.y))
+        screen.blit(log_middle_image, (self.x, self.y))
         # Place log_front.png at the bottom
-        screen.blit(log_front_tile, (self.x, self.y + TILE_SIZE))
+        screen.blit(log_front_image, (self.x, self.y + TILE_SIZE))
         #water_splash_tile
         screen.blit(water_splash_tile, (self.x, self.y + TILE_SIZE))
 
