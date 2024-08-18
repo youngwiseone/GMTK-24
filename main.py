@@ -26,6 +26,8 @@ pygame.mixer.init()
 log_break_sound = pygame.mixer.Sound("Assets/Sounds/log_break.wav")
 barrel_select_sound = pygame.mixer.Sound("Assets/Sounds/barrel_select.wav")
 player_move_sound = pygame.mixer.Sound("Assets/Sounds/slime_jump.wav")
+cast_line_sound = pygame.mixer.Sound("Assets/Sounds/cast_line.wav")
+bobber_lands_sound = pygame.mixer.Sound("Assets/Sounds/bobber_lands.wav")
 player_move_sound.set_volume(0.1)
 pygame.mixer.music.load("Assets/Sounds/background_music.wav")
 pygame.mixer.music.set_volume(0.2)
@@ -41,6 +43,7 @@ wood_tile = pygame.image.load("Assets/wood.png").convert()
 metal_tile = pygame.image.load("Assets/metal.png").convert()
 barrel_tile = pygame.image.load("Assets/barrel.png").convert()
 add_tile = pygame.image.load("Assets/add.png").convert()
+water_splash_tile = pygame.image.load("Assets/water_splash.png").convert()
 
 # Chroma key: make black (0, 0, 0) transparent
 log_back_tile.set_colorkey((0, 0, 0))
@@ -51,6 +54,7 @@ wood_tile.set_colorkey((0, 0, 0))
 metal_tile.set_colorkey((0, 0, 0))
 barrel_tile.set_colorkey((0, 0, 0))
 add_tile.set_colorkey((0, 0, 0))
+water_splash_tile.set_colorkey((0, 0, 0))
 
 # Resources
 class Resource:
@@ -94,6 +98,8 @@ class Log:
         screen.blit(log_middle_tile, (self.x, self.y))
         # Place log_front.png at the bottom
         screen.blit(log_front_tile, (self.x, self.y + TILE_SIZE))
+        #water_splash_tile
+        screen.blit(water_splash_tile, (self.x, self.y + TILE_SIZE))
 
         # Draw the health bar above the log
         font = pygame.font.SysFont(None, 24)
@@ -132,9 +138,11 @@ class Bobber:
         self.y = y
         self.target_y = y + TILE_SIZE * 2  # 2 tiles below the player
         self.state = "rising"  # Initial state
-        self.speed = 2  # Speed for movement
+        self.speed = 40  # Speed for movement
         self.animation_timer = 0
         self.dunking = False
+        self.caught_fish = None  # Store the type of fish caught
+        self.fish_image = None  # Store the image of the fish caught
 
         # Load bobber animation frames
         self.bobber_frames = [
@@ -148,13 +156,17 @@ class Bobber:
         self.dunk_delay = random.uniform(1, 5)
         self.dunk_start_time = time.time()
 
+        # Load fish images
+        self.wood_fish_image = pygame.image.load("Assets/woodfish.png").convert_alpha()
+        self.iron_fish_image = pygame.image.load("Assets/ironfish.png").convert_alpha()
+
     def update(self):
         if self.state == "rising":
-            self.y -= TILE_SIZE * self.speed  # Move up 3 tiles
+            self.y -= self.speed  # Move up 3 tiles
             if self.y <= self.start_y - TILE_SIZE * 3:
                 self.state = "falling"
         elif self.state == "falling":
-            self.y += TILE_SIZE * self.speed  # Move down to 2 tiles below the player
+            self.y += self.speed  # Move down to 2 tiles below the player
             if self.y >= self.target_y:
                 self.state = "waiting"
         elif self.state == "waiting":
@@ -162,24 +174,52 @@ class Bobber:
                 self.state = "dunking"
         elif self.state == "dunking":
             self.animate_dunk()
+        elif self.state == "raising":
+            self.raise_bobber()
 
     def animate_dunk(self):
         # Update animation frame based on timer
         self.animation_timer += 1
-        if self.animation_timer % 1 == 0:  # Change frame every 10 ticks
+        if self.animation_timer % 1 == 0:  # Change frame every tick
             self.current_frame = (self.current_frame + 1) % self.frame_count
 
+    def raise_bobber(self):
+        self.y -= self.speed  # Raise the bobber
+        if self.y <= self.start_y - TILE_SIZE * 3:
+            self.state = "finished"
+            # Add the corresponding resource to the player's inventory
+            if self.caught_fish == "wood":
+                wood.add_stock(5)
+            elif self.caught_fish == "metal":
+                metal.add_stock(5)
+            player.complete_fishing()
+
+    def select_fish(self):
+        # 50/50 chance to catch either the woodfish or ironfish
+        if random.choice([True, False]):
+            self.caught_fish = "wood"
+            self.fish_image = self.wood_fish_image
+        else:
+            self.caught_fish = "metal"
+            self.fish_image = self.iron_fish_image
+
     def draw(self):
-        if self.state == "dunking":
+        if self.state in ["dunking", "raising"]:
             frame_image = self.bobber_frames[self.current_frame]
         else:
             frame_image = pygame.image.load("Assets/bobber_dunk6.png").convert_alpha()  # Default bobber image
         screen.blit(frame_image, (self.x, self.y))
 
+        # Draw the fish if it has been caught
+        if self.state == "raising" and self.caught_fish:
+            screen.blit(self.fish_image, (self.x, self.y + 16))
+
     def on_click(self):
         # Handle when the player clicks on the bobber
         if self.state == "dunking":
-            self.state = "finished"
+            self.state = "raising"
+            self.current_frame = 0
+            self.select_fish()
 
 # Player class to handle the player object
 class Player:
@@ -295,12 +335,9 @@ class Player:
         if self.current_frame >= len(self.fishing_frames):
             self.current_frame = len(self.fishing_frames) - 1  # Stay on the last frame
 
-            # After the animation is done, add the resources
-            # self.complete_fishing()
-
     def complete_fishing(self):
         # Add resources after completing the fishing animation
-        wood.add_stock(5)  # Add 5 wood to the current stock
+        # wood.add_stock(5)  # Add 5 wood to the current stock
         self.is_fishing = False  # Stop fishing after resources are added
         self.bobber = None  # Remove the bobber after fishing is complete
         self.current_frame = 0
@@ -309,6 +346,7 @@ class Player:
         # Start the fishing animation
         self.is_fishing = True
         self.current_frame = 0
+        cast_line_sound.play()
         self.bobber = Bobber(self.x, self.y)  # Start bobber at the player's position
 
     def handle_mouse_click(self, mouse_x, mouse_y):
@@ -316,7 +354,6 @@ class Player:
             bobber_rect = pygame.Rect(self.bobber.x, self.bobber.y, TILE_SIZE, TILE_SIZE)
             if bobber_rect.collidepoint(mouse_x, mouse_y):
                 self.bobber.on_click()
-                self.complete_fishing()
 
     def ease_in_out(self, t):
         return 3 * t**2 - 2 * t**3  # Smooth start and end
