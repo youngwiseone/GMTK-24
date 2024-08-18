@@ -17,6 +17,13 @@ LEVEL = 1
 STARTING_RESOURCES = 100
 METER_DISTANCE_PER_KNOT = 32
 
+menu_font = pygame.font.SysFont(None, 48)  # Adjust size as needed
+menu_x = SCREEN_WIDTH // 2 - 160  # Center the menu horizontally
+menu_y = -320  # Start above the screen
+menu_falling = False  # Track if the menu is falling
+menu_landed = False  # Track if the menu has landed
+menu_fall_speed = 80  # Speed of the menu falling
+
 knots_speed = 0  # Initial speed
 distance_travelled = 0  # Distance travelled in meters
 distance_meter = 0  # Used to accumulate knot distance until a meter is achieved
@@ -34,6 +41,7 @@ player_move_sound = pygame.mixer.Sound("Assets/Sounds/slime_jump.wav")
 cast_line_sound = pygame.mixer.Sound("Assets/Sounds/cast_line.wav")
 bobber_lands_sound = pygame.mixer.Sound("Assets/Sounds/bobber_lands.wav")
 fish_on_line_sound = pygame.mixer.Sound("Assets/Sounds/fish_on_line.wav")
+game_over_sound = pygame.mixer.Sound("Assets/Sounds/game_over.wav")
 player_move_sound.set_volume(0.1)
 fish_on_line_sound.set_volume(1.3)
 pygame.mixer.music.load("Assets/Sounds/background_music.wav")
@@ -50,6 +58,7 @@ wood_tile = pygame.image.load("Assets/wood.png").convert()
 metal_tile = pygame.image.load("Assets/metal.png").convert()
 barrel_tile = pygame.image.load("Assets/barrel.png").convert()
 add_tile = pygame.image.load("Assets/add.png").convert()
+menu_image = pygame.image.load("Assets/menu.png").convert()
 water_splash_tile = pygame.image.load("Assets/water_splash.png").convert()
 
 #Load log images
@@ -84,6 +93,7 @@ wood_tile.set_colorkey((0, 0, 0))
 metal_tile.set_colorkey((0, 0, 0))
 barrel_tile.set_colorkey((0, 0, 0))
 add_tile.set_colorkey((0, 0, 0))
+menu_image.set_colorkey((0, 0, 0))
 water_splash_tile.set_colorkey((0, 0, 0))
 
 # Resources
@@ -181,9 +191,9 @@ class Log:
         screen.blit(water_splash_tile, (self.x, self.y + TILE_SIZE))
 
         # Draw the health bar above the log
-        font = pygame.font.SysFont(None, 24)
-        health_text = font.render(str(self.health), True, (255, 255, 255))
-        screen.blit(health_text, (self.x, self.y - TILE_SIZE * 2))
+        # font = pygame.font.SysFont(None, 24)
+        # health_text = font.render(str(self.health), True, (255, 255, 255))
+        # screen.blit(health_text, (self.x, self.y - TILE_SIZE * 2))
 
         # Only draw the add_tile if this is the log the player is on and it has an empty spot
         if player:
@@ -203,7 +213,7 @@ class Log:
         else:
             # Only decrease health if there isn't a log on both sides
             if not(has_left_log and has_right_log):
-                self.health -= 1
+                self.health -= 1*knots_speed
 
         # Ensure health doesn't go below 0
         if self.health < 0:
@@ -669,6 +679,57 @@ def show_resource_selection_menu():
                         return "wood"
                     elif menu_y + 40 < mouse_y < menu_y + 80:
                         return "metal"
+                    
+def draw_menu_with_distance():
+    # Render the distance text
+    distance_number = str(int(distance_travelled))  # Convert the integer part to string
+    distance_text = menu_font.render(distance_number, True, (255, 255, 255))  # White text
+    distance_text_rect = distance_text.get_rect(center=(menu_x + 220, menu_y + 80))
+    # Render the high score text
+    hiscore_text = menu_font.render(f"{hiscore}", True, (255, 255, 255))
+    hiscore_text_rect = hiscore_text.get_rect(center=(menu_x + 220, menu_y + 145))
+
+    # Draw the menu image
+    screen.blit(menu_image, (menu_x, menu_y))
+    # Draw the distance text on top of the menu
+    screen.blit(distance_text, distance_text_rect)
+    screen.blit(hiscore_text, hiscore_text_rect)
+
+def load_hiscore():
+    try:
+        with open("hiscore.txt", "r") as file:
+            return int(file.read())
+    except FileNotFoundError:
+        return 0  # If the file doesn't exist, start with a score of 0
+
+hiscore = load_hiscore()
+game_over_sound_played = False
+
+def save_hiscore(score):
+    with open("hiscore.txt", "w") as file:
+        file.write(str(score))
+                    
+def restart_game():
+    global player, logs, barrels, sails, knots_speed, distance_travelled, distance_meter, menu_falling, menu_landed, menu_y
+
+    # Reset the game state
+    logs = []
+    barrels = []
+    sails = []
+    knots_speed = 0
+    distance_travelled = 0
+    distance_meter = 0
+    menu_falling = False
+    menu_landed = False
+    menu_y = -320  # Reset menu position
+
+    # Create and add 3 logs spaced horizontally
+    logs.append(Log(center_x := (COLS // 2) * TILE_SIZE, center_y := (ROWS // 2) * TILE_SIZE, 4))
+    logs.append(Log(center_x + TILE_SIZE, center_y, 2))
+    logs.append(Log(center_x - TILE_SIZE, center_y, 2))
+
+    # Create the player and place it on the first log
+    player = Player(center_x, center_y - TILE_SIZE)
 
 # Main game loop
 running = True
@@ -701,9 +762,9 @@ wood = Resource("wood", SCREEN_WIDTH // 2 - TILE_SIZE, TILE_SIZE, STARTING_RESOU
 metal = Resource("metal", SCREEN_WIDTH // 2 + TILE_SIZE, TILE_SIZE, STARTING_RESOURCES, 100, metal_tile)
 
 # Create and add 3 logs spaced horizontally
-logs.append(Log(center_x := (COLS // 2) * TILE_SIZE, center_y := (ROWS // 2) * TILE_SIZE, 4))
+logs.append(Log(center_x := (COLS // 2) * TILE_SIZE, center_y := (ROWS // 2) * TILE_SIZE, 3))
 logs.append(Log(center_x + TILE_SIZE, center_y, 2))
-logs.append(Log(center_x - TILE_SIZE, center_y, 1))
+logs.append(Log(center_x - TILE_SIZE, center_y, 2))
 
 # Create the player and place it on the first log
 player = Player(center_x, center_y - TILE_SIZE)
@@ -744,6 +805,25 @@ while running:
                         if log.x == player.x and log.y == player.y:  # Ensure the player is on the log
                             place_structure_on_log(log)
                             break
+        else:
+            # New event handling when the player does not exist
+            if event.type == pygame.MOUSEBUTTONDOWN and menu_landed:
+                # Restart the game when the menu is clicked
+                game_over_sound_played = False
+                # Stop the menu music and restart the background music
+                pygame.mixer.music.stop()  # Stop the menu music
+                pygame.mixer.music.load("Assets/Sounds/background_music.wav")  # Load the background music
+                pygame.mixer.music.play(-1)  # Play the background music on loop
+                restart_game()
+    
+    if not player:
+        menu_falling = True
+
+    if menu_falling and not menu_landed:
+        menu_y += menu_fall_speed
+        if menu_y >= SCREEN_HEIGHT // 2 - 160:  # Center the menu vertically
+            menu_y = SCREEN_HEIGHT // 2 - 160
+            menu_landed = True
     
     distance_meter += knots_speed
 
@@ -827,6 +907,20 @@ while running:
     font = pygame.font.SysFont(None, 24)
     distance_text = font.render(f"Distance: {distance_travelled} m", True, (255, 255, 255))
     screen.blit(distance_text, (SCREEN_WIDTH - 150, 10))
+
+    if player == None:
+        if distance_travelled > hiscore:
+            hiscore = distance_travelled
+            save_hiscore(hiscore)    
+        draw_menu_with_distance()
+        
+        if not game_over_sound_played:
+            game_over_sound.play()  # Play the game-over sound
+            game_over_sound_played = True  # Set the flag to True to prevent replaying
+            # Stop the background music and play the menu music
+            pygame.mixer.music.stop()  # Stop the background music
+            pygame.mixer.music.load("Assets/Sounds/menu_music.wav")  # Load the menu music
+            pygame.mixer.music.play(-1)  # Play the menu music on loop
 
     # Update the display
     pygame.display.flip()
