@@ -15,6 +15,11 @@ COLS = SCREEN_WIDTH // TILE_SIZE
 LOG_HEALTH = 100
 LEVEL = 1
 STARTING_RESOURCES = 0
+METER_DISTANCE_PER_KNOT = 32
+
+knots_speed = 0  # Initial speed
+distance_travelled = 0  # Distance travelled in meters
+distance_meter = 0  # Used to accumulate knot distance until a meter is achieved
 
 # Set up the display
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -471,6 +476,75 @@ class Barrel:
         if resource_sprite:
             screen.blit(resource_sprite, (self.x, self.y))
 
+class Sail:
+    def __init__(self, x, y, log):
+        self.x = x
+        self.y = y
+        self.log = log
+        self.sprite = pygame.image.load("Assets/sail.png").convert_alpha()
+
+    def draw(self):
+        screen.blit(self.sprite, (self.x, self.y))
+
+def show_build_selection_menu():
+    # Draw the menu background
+    menu_width, menu_height = 200, 100
+    menu_x = SCREEN_WIDTH // 2 - menu_width // 2
+    menu_y = SCREEN_HEIGHT // 2 - menu_height // 2
+    pygame.draw.rect(screen, (0, 0, 0), (menu_x, menu_y, menu_width, menu_height))
+
+    # Draw the options
+    font = pygame.font.SysFont(None, 24)
+    barrel_option = font.render("Build Barrel", True, (255, 255, 255))
+    sail_option = font.render("Build Sail", True, (255, 255, 255))
+    
+    screen.blit(barrel_option, (menu_x + 20, menu_y + 20))
+    screen.blit(sail_option, (menu_x + 20, menu_y + 60))
+
+    # Refresh display to show the menu
+    pygame.display.flip()
+
+    # Wait for player to select an option
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                mouse_x, mouse_y = event.pos
+                if menu_x < mouse_x < menu_x + menu_width:
+                    if menu_y < mouse_y < menu_y + 40:
+                        return "barrel"
+                    elif menu_y + 40 < mouse_y < menu_y + 80:
+                        return "sail"
+
+def place_structure_on_log(log):
+    global knots_speed
+    # Show build selection menu
+    build_choice = show_build_selection_menu()
+    
+    if build_choice == "barrel":
+        # Show the resource selection menu if Barrel is selected
+        selected_resource = show_resource_selection_menu()
+
+        # Place the barrel on the log with the selected resource type
+        barrels.append(Barrel(log.x, log.y - TILE_SIZE, barrel_tile, log, selected_resource))
+        log.has_empty_spot = False  # Mark the spot as used
+        barrel_select_sound.play()
+
+        # Increase the max limit of the selected resource
+        if selected_resource == "wood":
+            wood.max_stock += 50
+        elif selected_resource == "metal":
+            metal.max_stock += 50
+
+    elif build_choice == "sail":
+        # Place a sail on the log
+        sails.append(Sail(log.x, log.y - TILE_SIZE *2, log))
+        log.has_empty_spot = False  # Mark the spot as used
+        knots_speed += 1  # Increase knots speed
+        # (You can add a sound effect for placing the sail here if desired)
+
 def show_resource_selection_menu():
     # Draw the menu background
     menu_width, menu_height = 200, 150
@@ -507,6 +581,7 @@ def show_resource_selection_menu():
 running = True
 logs = []
 barrels = []
+sails = []  # List to store all sails
 # Initialize background tiles
 # Load images for background animation
 background_frames = [
@@ -524,7 +599,8 @@ for row in range(ROWS):
     for col in range(COLS):
         background_tiles.append(pygame.Rect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE))
 
-background_speed = 2  # Speed at which the background moves
+# Update the background speed
+background_speed = knots_speed
 background_moving = True  # Track if the background is moving
 
 # Create resources
@@ -574,6 +650,10 @@ while running:
                             logs.append(Log(player.x - TILE_SIZE, player.y, 1))
                         elif can_build_right:
                             logs.append(Log(player.x + TILE_SIZE, player.y, 1))
+            elif event.key == pygame.K_o:  # Increase knots speed
+                knots_speed += 1
+            elif event.key == pygame.K_p:  # Decrease knots speed
+                knots_speed = max(0, knots_speed - 1)  # Ensure it doesn't go below 0
         # Separate MOUSEBUTTONDOWN handling
         elif event.type == pygame.MOUSEBUTTONDOWN:
             mouse_x, mouse_y = event.pos
@@ -582,21 +662,19 @@ while running:
                 # Check if the click is on the add_tile and the log has an empty spot
                 if log.has_empty_spot and log.x <= mouse_x <= log.x + TILE_SIZE and log.y - TILE_SIZE <= mouse_y <= log.y:
                     if log.x == player.x and log.y == player.y:  # Ensure the player is on the log
-                        # Show the resource selection menu
-                        selected_resource = show_resource_selection_menu()
-
-                        # Place the barrel on the log with the selected resource type
-                        barrels.append(Barrel(log.x, log.y - TILE_SIZE, barrel_tile, log, selected_resource))
-                        log.has_empty_spot = False  # Mark the spot as used
-                        barrel_select_sound.play()
-
-                        # Increase the max limit of the selected resource
-                        if selected_resource == "wood":
-                            wood.max_stock += 50
-                        elif selected_resource == "metal":
-                            metal.max_stock += 50
-
+                        place_structure_on_log(log)
                         break
+    
+    distance_meter += knots_speed
+
+    # Check if distance_meter has reached or exceeded the threshold for 1 meter
+    if distance_meter >= METER_DISTANCE_PER_KNOT:
+        meters_to_add = distance_meter // METER_DISTANCE_PER_KNOT  # Calculate full meters to add
+        distance_travelled += meters_to_add
+        distance_meter %= METER_DISTANCE_PER_KNOT  # Carry over the remainder
+
+    # Update the background speed
+    background_speed = knots_speed
 
     # Update background animation
     background_frame_timer += 1
@@ -641,17 +719,30 @@ while running:
                     if barrel.resource_type == "metal":
                         metal.max_stock -= 50  # Decrease the max stock of wood by 50
                     barrels.remove(barrel)
+            # Remove any sails on this log and decrease the knots speed
+            for sail in sails[:]:
+                if sail.log == log:
+                    sails.remove(sail)
+                    knots_speed -= 1  # Decrease knots speed when the sail is removed
 
     # Draw all barrels
     for barrel in barrels:
         barrel.draw()
 
+    # Draw all sails
+    for sail in sails:
+        sail.draw()
 
     # Update and draw the player
     if player.update(logs):
         player = None  # Delete the player if they fall off the log
     if player:
         player.draw()
+
+    # Drawing the distance travelled at the top right corner
+    font = pygame.font.SysFont(None, 24)
+    distance_text = font.render(f"Distance: {distance_travelled} m", True, (255, 255, 255))
+    screen.blit(distance_text, (SCREEN_WIDTH - 150, 10))
 
     # Update the display
     pygame.display.flip()
