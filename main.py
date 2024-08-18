@@ -1,5 +1,7 @@
 import pygame
 import sys
+import random
+import time
 
 # Initialize Pygame
 pygame.init()
@@ -122,15 +124,62 @@ class Log:
         # Check if the log is destroyed (health reaches 0)
         return self.health == 0
     
-# Bobber class to handle the bobber object
 class Bobber:
     def __init__(self, x, y):
+        self.start_x = x
+        self.start_y = y
         self.x = x
         self.y = y
-        self.image = pygame.image.load("Assets/bobber_dunk6.png").convert_alpha()
+        self.target_y = y + TILE_SIZE * 2  # 2 tiles below the player
+        self.state = "rising"  # Initial state
+        self.speed = 2  # Speed for movement
+        self.animation_timer = 0
+        self.dunking = False
+
+        # Load bobber animation frames
+        self.bobber_frames = [
+            pygame.image.load(f"Assets/bobber_dunk{i}.png").convert_alpha()
+            for i in range(3, 7)  # Frames 3 to 6 for looping dunk animation
+        ]
+        self.current_frame = 0
+        self.frame_count = len(self.bobber_frames)
+
+        # Set a random delay between 1-5 seconds before dunking starts
+        self.dunk_delay = random.uniform(1, 5)
+        self.dunk_start_time = time.time()
+
+    def update(self):
+        if self.state == "rising":
+            self.y -= TILE_SIZE * self.speed  # Move up 3 tiles
+            if self.y <= self.start_y - TILE_SIZE * 3:
+                self.state = "falling"
+        elif self.state == "falling":
+            self.y += TILE_SIZE * self.speed  # Move down to 2 tiles below the player
+            if self.y >= self.target_y:
+                self.state = "waiting"
+        elif self.state == "waiting":
+            if time.time() - self.dunk_start_time >= self.dunk_delay:
+                self.state = "dunking"
+        elif self.state == "dunking":
+            self.animate_dunk()
+
+    def animate_dunk(self):
+        # Update animation frame based on timer
+        self.animation_timer += 1
+        if self.animation_timer % 1 == 0:  # Change frame every 10 ticks
+            self.current_frame = (self.current_frame + 1) % self.frame_count
 
     def draw(self):
-        screen.blit(self.image, (self.x, self.y))
+        if self.state == "dunking":
+            frame_image = self.bobber_frames[self.current_frame]
+        else:
+            frame_image = pygame.image.load("Assets/bobber_dunk6.png").convert_alpha()  # Default bobber image
+        screen.blit(frame_image, (self.x, self.y))
+
+    def on_click(self):
+        # Handle when the player clicks on the bobber
+        if self.state == "dunking":
+            self.state = "finished"
 
 # Player class to handle the player object
 class Player:
@@ -196,6 +245,10 @@ class Player:
         if self.is_fishing:
             self.perform_fishing()
 
+        # Update the bobber if it exists
+        if self.bobber and self.bobber.state != "finished":
+            self.bobber.update()
+
         # Check if the log the player is standing on is destroyed
         if not self.can_stand_on_log(self.x, logs):
             # If the player is fishing, reset the animation and stop fishing
@@ -249,13 +302,21 @@ class Player:
         # Add resources after completing the fishing animation
         wood.add_stock(5)  # Add 5 wood to the current stock
         self.is_fishing = False  # Stop fishing after resources are added
+        self.bobber = None  # Remove the bobber after fishing is complete
         self.current_frame = 0
 
     def start_fishing(self):
         # Start the fishing animation
         self.is_fishing = True
         self.current_frame = 0
-        self.bobber = Bobber(self.x, self.y + 2 * TILE_SIZE)  # Spawn bobber 2 tiles below the player
+        self.bobber = Bobber(self.x, self.y)  # Start bobber at the player's position
+
+    def handle_mouse_click(self, mouse_x, mouse_y):
+        if self.bobber and self.bobber.state == "dunking":
+            bobber_rect = pygame.Rect(self.bobber.x, self.bobber.y, TILE_SIZE, TILE_SIZE)
+            if bobber_rect.collidepoint(mouse_x, mouse_y):
+                self.bobber.on_click()
+                self.complete_fishing()
 
     def ease_in_out(self, t):
         return 3 * t**2 - 2 * t**3  # Smooth start and end
@@ -266,7 +327,16 @@ class Player:
         else:
             frame_image = self.sliding_frames[self.current_frame]
         screen.blit(frame_image, (self.x, self.y - TILE_SIZE))
+        # Draw the line if the bobber exists
+        if self.bobber:
+            # Calculate the line start and end positions
+            line_start_x = self.x + TILE_SIZE // 2  # Center of the player's tile
+            line_start_y = self.y - TILE_SIZE  # Top of the tile above the player
+            line_end_x = self.bobber.start_x + TILE_SIZE // 2  # Center of the bobber
+            line_end_y = self.bobber.y + TILE_SIZE // 2  # Center of the bobber
 
+            # Draw the line
+            pygame.draw.line(screen, (0, 0, 0), (line_start_x, line_start_y), (line_end_x, line_end_y), 2)  # 2 is the line thickness
         # Draw the bobber if it exists
         if self.bobber:
             self.bobber.draw()
@@ -399,6 +469,7 @@ while running:
         # Separate MOUSEBUTTONDOWN handling
         elif event.type == pygame.MOUSEBUTTONDOWN:
             mouse_x, mouse_y = event.pos
+            player.handle_mouse_click(mouse_x, mouse_y)
             for log in logs:
                 # Check if the click is on the add_tile and the log has an empty spot
                 if log.has_empty_spot and log.x <= mouse_x <= log.x + TILE_SIZE and log.y - TILE_SIZE <= mouse_y <= log.y:
