@@ -121,6 +121,16 @@ class Log:
     def is_destroyed(self):
         # Check if the log is destroyed (health reaches 0)
         return self.health == 0
+    
+# Bobber class to handle the bobber object
+class Bobber:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.image = pygame.image.load("Assets/bobber_dunk6.png").convert_alpha()
+
+    def draw(self):
+        screen.blit(self.image, (self.x, self.y))
 
 # Player class to handle the player object
 class Player:
@@ -132,16 +142,29 @@ class Player:
         self.start_x = None
         self.progress = 0
         self.speed = 0.4  # Speed attribute for sliding
+        self.bobber = None  # Bobber attribute
 
         # Load animation frames
-        self.animation_frames = [
+        self.sliding_frames = [
             pygame.image.load(f"Assets/slime_jump{i}.png").convert_alpha()
-            for i in range(1, 7)
+            for i in range(1, 8)
         ]
         self.current_frame = 0
-        self.frame_count = len(self.animation_frames)
+        self.frame_count = len(self.sliding_frames)
+
+        # Load fishing animation frames
+        self.fishing_frames = [
+            pygame.image.load(f"Assets/slime_fishing{i}.png").convert_alpha()
+            for i in range(1, 7)
+        ]
+        self.is_fishing = False
 
     def move(self, direction, logs):
+        # If the player is fishing, reset the animation and stop fishing
+        if self.is_fishing:
+            self.is_fishing = False
+            self.current_frame = 0
+
         # Calculate the new position
         if direction == "left":
             new_x = self.x - TILE_SIZE
@@ -168,17 +191,20 @@ class Player:
         if self.target_x is not None:
             self.perform_slide()
             return
+        
+        # Perform fishing animation if fishing
+        if self.is_fishing:
+            self.perform_fishing()
 
         # Check if the log the player is standing on is destroyed
         if not self.can_stand_on_log(self.x, logs):
+            # If the player is fishing, reset the animation and stop fishing
+            self.current_frame = 0
             # Make the player fall down one tile space
             self.y += TILE_SIZE
             # If the player is no longer on a log, delete the player
             if not self.can_stand_on_log(self.x, logs):
                 return True
-            
-        if self.target_x is None:
-            self.current_frame = 0  # Reset animation frame to 0 when idle
             
         return False
     
@@ -192,7 +218,7 @@ class Player:
     def perform_slide(self):
         if self.target_x is None:
             return
-
+        self.bobber = False
         self.progress += self.speed  # Increase progress based on speed
 
         # Apply easing (quadratic easing)
@@ -200,21 +226,50 @@ class Player:
 
         # Interpolate the x position
         self.x = self.start_x + (self.target_x - self.start_x) * easing_progress
+        
+        # Update the calculation of the current animation frame in the perform_slide method
+        self.current_frame = int(self.progress * self.frame_count) % self.frame_count
 
         # End the slide when progress is complete
         if self.progress >= 1:
             self.x = self.target_x
             self.target_x = None
-        
-        # Update the calculation of the current animation frame in the perform_slide method
-        self.current_frame = int(self.progress * self.frame_count) % self.frame_count
+            self.current_frame = 0
+
+    def perform_fishing(self):
+        # Update the current frame based on fishing animation
+        self.current_frame += 1
+        if self.current_frame >= len(self.fishing_frames):
+            self.current_frame = len(self.fishing_frames) - 1  # Stay on the last frame
+
+            # After the animation is done, add the resources
+            # self.complete_fishing()
+
+    def complete_fishing(self):
+        # Add resources after completing the fishing animation
+        wood.add_stock(5)  # Add 5 wood to the current stock
+        self.is_fishing = False  # Stop fishing after resources are added
+        self.current_frame = 0
+
+    def start_fishing(self):
+        # Start the fishing animation
+        self.is_fishing = True
+        self.current_frame = 0
+        self.bobber = Bobber(self.x, self.y + 2 * TILE_SIZE)  # Spawn bobber 2 tiles below the player
 
     def ease_in_out(self, t):
         return 3 * t**2 - 2 * t**3  # Smooth start and end
 
     def draw(self):
-        frame_image = self.animation_frames[self.current_frame]
+        if self.is_fishing:
+            frame_image = self.fishing_frames[self.current_frame]
+        else:
+            frame_image = self.sliding_frames[self.current_frame]
         screen.blit(frame_image, (self.x, self.y - TILE_SIZE))
+
+        # Draw the bobber if it exists
+        if self.bobber:
+            self.bobber.draw()
 
 
 class Barrel:
@@ -275,6 +330,15 @@ running = True
 logs = []
 barrels = []
 # Initialize background tiles
+# Load images for background animation
+background_frames = [
+    pygame.image.load(f"Assets/sea_animation{i}.png").convert()
+    for i in range(1, 5)
+]
+current_background_frame = 0
+background_frame_count = len(background_frames)
+background_animation_speed = 2  # Adjust this for desired speed
+background_frame_timer = 0
 background_tiles = []
 
 # Fill the screen with the initial background tiles
@@ -309,7 +373,7 @@ while running:
                 player.move("right", logs)
                 player_move_sound.play()
             elif event.key == pygame.K_f:
-                wood.add_stock(5)  # Add 5 wood to the current stock
+                player.start_fishing()
             elif event.key == pygame.K_SPACE:
                 # Check if the player is on a log and has enough wood
                 for log in logs:
@@ -355,6 +419,12 @@ while running:
 
                         break
 
+    # Update background animation
+    background_frame_timer += 1
+    if background_frame_timer >= background_animation_speed:
+        current_background_frame = (current_background_frame + 1) % background_frame_count
+        background_frame_timer = 0
+    
     # Move background tiles
     if background_moving:
         for tile in background_tiles:
@@ -369,9 +439,9 @@ while running:
             for row in range(ROWS):
                 background_tiles.append(pygame.Rect(last_col_x, row * TILE_SIZE, TILE_SIZE, TILE_SIZE))
 
-    # Draw the background tiles
+    # Draw the background tiles with the current frame
     for tile in background_tiles:
-        screen.blit(background_tile, tile)
+        screen.blit(background_frames[current_background_frame], tile)
 
     # Draw the resource
     wood.draw()
