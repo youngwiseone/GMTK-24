@@ -219,6 +219,7 @@ class Bobber:
         self.dunking = False
         self.caught_fish = None  # Store the type of fish caught
         self.fish_image = None  # Store the image of the fish caught
+        self.drift_direction = 0  # Amount of drift to the left or right
 
         # Load bobber animation frames
         self.bobber_frames = [
@@ -248,10 +249,23 @@ class Bobber:
         elif self.state == "waiting":
             if time.time() - self.dunk_start_time >= self.dunk_delay:
                 self.state = "dunking"
+            else:
+                self.drift()  # Apply drift while waiting
         elif self.state == "dunking":
             self.animate_dunk()
         elif self.state == "raising":
             self.raise_bobber()
+
+    def drift(self):
+        # Increase the drift effect
+        desired_drift = -knots_speed * 0.3  # Drift left with increasing speed
+        if self.drift_direction < desired_drift:
+            self.drift_direction += 0.2  # Gradually drift left
+        elif self.drift_direction > desired_drift:
+            self.drift_direction -= 0.2  # Gradually drift right
+
+        # Update the bobber's x position based on the drift
+        self.x += self.drift_direction
 
     def animate_dunk(self):
         # Update animation frame based on timer
@@ -445,7 +459,7 @@ class Player:
             # Calculate the line start and end positions
             line_start_x = self.x + TILE_SIZE // 2  # Center of the player's tile
             line_start_y = self.y - TILE_SIZE  # Top of the tile above the player
-            line_end_x = self.bobber.start_x + TILE_SIZE // 2  # Center of the bobber
+            line_end_x = self.bobber.x + TILE_SIZE // 2  # Adjusted for drift
             line_end_y = self.bobber.y + TILE_SIZE // 2  # Center of the bobber
 
             # Draw the line
