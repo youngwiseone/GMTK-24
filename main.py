@@ -14,7 +14,7 @@ ROWS = SCREEN_HEIGHT // TILE_SIZE
 COLS = SCREEN_WIDTH // TILE_SIZE
 LOG_HEALTH = 100
 LEVEL = 1
-STARTING_RESOURCES = 0
+STARTING_RESOURCES = 100
 METER_DISTANCE_PER_KNOT = 32
 
 knots_speed = 0  # Initial speed
@@ -33,7 +33,9 @@ barrel_select_sound = pygame.mixer.Sound("Assets/Sounds/barrel_select.wav")
 player_move_sound = pygame.mixer.Sound("Assets/Sounds/slime_jump.wav")
 cast_line_sound = pygame.mixer.Sound("Assets/Sounds/cast_line.wav")
 bobber_lands_sound = pygame.mixer.Sound("Assets/Sounds/bobber_lands.wav")
+fish_on_line_sound = pygame.mixer.Sound("Assets/Sounds/fish_on_line.wav")
 player_move_sound.set_volume(0.1)
+fish_on_line_sound.set_volume(1.3)
 pygame.mixer.music.load("Assets/Sounds/background_music.wav")
 pygame.mixer.music.set_volume(0.2)
 pygame.mixer.music.play(-1)
@@ -122,6 +124,7 @@ class Log:
         self.log_back_images  = log_back_images
         self.log_middle_images = log_middle_images
         self.log_front_images = log_front_images
+        self.destroyed_time = 0
 
     def get_log_back_image(self, part):
         # Calculate the health percentage
@@ -162,7 +165,7 @@ class Log:
             else:
                 return self.log_front_images[4]  # 20%-0%
 
-    def draw(self, player):
+    def draw(self, player=None):
         # Determine the correct log_back image
         log_back_image = self.get_log_back_image("back")
         log_middle_image = self.get_log_back_image("middle")
@@ -183,17 +186,24 @@ class Log:
         screen.blit(health_text, (self.x, self.y - TILE_SIZE * 2))
 
         # Only draw the add_tile if this is the log the player is on and it has an empty spot
-        if self.has_empty_spot and self.x == player.x and self.y == player.y:
-            screen.blit(add_tile, (self.x, self.y - TILE_SIZE))
+        if player:
+            if self.has_empty_spot and self.x == player.x and self.y == player.y:
+                screen.blit(add_tile, (self.x, self.y - TILE_SIZE))
 
     def update(self, logs):
         # Check if there are logs on both sides
         has_left_log = any(log.x == self.x - TILE_SIZE and log.y == self.y for log in logs)
         has_right_log = any(log.x == self.x + TILE_SIZE and log.y == self.y for log in logs)
     
-        # Only decrease health if there isn't a log on both sides
-        if not (has_left_log and has_right_log):
-            self.health -= 1
+        if player is None and not(has_left_log and has_right_log):
+            # Add a delay before destroying the log
+            if time.time() - self.destroyed_time >= 0.5:  # 0.5 seconds delay between each log
+                self.health -= 9999999
+                self.destroyed_time = time.time()  # Update the destroyed_time
+        else:
+            # Only decrease health if there isn't a log on both sides
+            if not(has_left_log and has_right_log):
+                self.health -= 1
 
         # Ensure health doesn't go below 0
         if self.health < 0:
@@ -205,6 +215,38 @@ class Log:
     def is_destroyed(self):
         # Check if the log is destroyed (health reaches 0)
         return self.health == 0
+    
+def draw_add_tile():
+    for log in logs:
+        if player and wood.current_stock >= 10:  # Only show the add_tile if there are enough resources and player exists
+            if log.x == player.x and log.y == player.y:  # Check if the player is on this log
+                can_build_left = not any(l.x == log.x - TILE_SIZE for l in logs)
+                can_build_right = not any(l.x == log.x + TILE_SIZE for l in logs)
+
+                # Show add_tile on the left if possible
+                if can_build_left:
+                    screen.blit(add_tile, (log.x - TILE_SIZE, log.y))
+
+                # Show add_tile on the right if possible
+                if can_build_right:
+                    screen.blit(add_tile, (log.x + TILE_SIZE, log.y))
+
+def handle_add_tile_click(mouse_x, mouse_y):
+    for log in logs:
+        if player and log.x == player.x and log.y == player.y:  # Ensure player is on this log
+            can_build_left = not any(l.x == log.x - TILE_SIZE for l in logs)
+            can_build_right = not any(l.x == log.x + TILE_SIZE for l in logs)
+
+            if can_build_left and log.x - TILE_SIZE <= mouse_x <= log.x and log.y <= mouse_y <= log.y + TILE_SIZE:
+                place_log(log.x - TILE_SIZE, log.y)
+
+            if can_build_right and log.x + TILE_SIZE <= mouse_x <= log.x + 2 * TILE_SIZE and log.y <= mouse_y <= log.y + TILE_SIZE:
+                place_log(log.x + TILE_SIZE, log.y)
+
+def place_log(x, y):
+    if wood.current_stock >= 10:  # Check if there are enough resources
+        wood.remove_stock(10)
+        logs.append(Log(x, y, 1))
     
 class Bobber:
     def __init__(self, x, y):
@@ -220,6 +262,9 @@ class Bobber:
         self.caught_fish = None  # Store the type of fish caught
         self.fish_image = None  # Store the image of the fish caught
         self.drift_direction = 0  # Amount of drift to the left or right
+        self.fish_on_line_playing = False
+        self.fish_sound_duration = fish_on_line_sound.get_length()
+        self.fish_sound_start_time = 0
 
         # Load bobber animation frames
         self.bobber_frames = [
@@ -249,12 +294,22 @@ class Bobber:
         elif self.state == "waiting":
             if time.time() - self.dunk_start_time >= self.dunk_delay:
                 self.state = "dunking"
+                self.play_fish_on_line_sound()
             else:
                 self.drift()  # Apply drift while waiting
         elif self.state == "dunking":
             self.animate_dunk()
         elif self.state == "raising":
             self.raise_bobber()
+            if self.fish_on_line_playing:
+                self.stop_fish_on_line_sound()
+
+    def play_fish_on_line_sound(self):
+        fish_on_line_sound.play()
+
+    def stop_fish_on_line_sound(self):
+        fish_on_line_sound.stop()
+        self.fish_on_line_playing = False
 
     def drift(self):
         # Increase the drift effect
@@ -656,52 +711,39 @@ player = Player(center_x, center_y - TILE_SIZE)
 while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
-            running = False
-        elif event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_LEFT or event.key == pygame.K_a:
-                player.move("left", logs)
-                player_move_sound.play()
-            elif event.key == pygame.K_RIGHT or event.key == pygame.K_d:
-                player.move("right", logs)
-                player_move_sound.play()
-            elif event.key == pygame.K_f:
-                player.start_fishing()
-            elif event.key == pygame.K_SPACE:
-                # Check if the player is on a log and has enough wood
+                running = False
+        if player:            
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_LEFT or event.key == pygame.K_a:
+                    player.move("left", logs)
+                    player_move_sound.play()
+                elif event.key == pygame.K_RIGHT or event.key == pygame.K_d:
+                    player.move("right", logs)
+                    player_move_sound.play()
+                elif event.key == pygame.K_f:
+                    player.start_fishing()
+                elif event.key == pygame.K_SPACE:
+                    # Check if the player is on a log and has enough wood
+                    for log in logs:
+                        if log.x == player.x:
+                            if wood.current_stock >= 5:
+                                wood.remove_stock(5)  # Use 5 wood
+                                log.restore_health(50)  # Restore 50 health to the log
+                elif event.key == pygame.K_o:  # Increase knots speed
+                    knots_speed += 1
+                elif event.key == pygame.K_p:  # Decrease knots speed
+                    knots_speed = max(0, knots_speed - 1)  # Ensure it doesn't go below 0
+            # Separate MOUSEBUTTONDOWN handling
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                mouse_x, mouse_y = event.pos
+                handle_add_tile_click(mouse_x, mouse_y)
+                player.handle_mouse_click(mouse_x, mouse_y)
                 for log in logs:
-                    if log.x == player.x:
-                        if wood.current_stock >= 5:
-                            wood.remove_stock(5)  # Use 5 wood
-                            log.restore_health(50)  # Restore 50 health to the log
-            elif event.key == pygame.K_e:
-                # Check if the player has at least 10 wood
-                if wood.current_stock >= 10:
-                    # Determine if there is space to the left or right of the current log
-                    can_build_left = not any(log.x == player.x - TILE_SIZE for log in logs)
-                    can_build_right = not any(log.x == player.x + TILE_SIZE for log in logs)
-
-                    # Build the log if there is space
-                    if can_build_left or can_build_right:
-                        wood.remove_stock(10)  # Subtract 10 wood from the stock
-
-                        if can_build_left:
-                            logs.append(Log(player.x - TILE_SIZE, player.y, 1))
-                        elif can_build_right:
-                            logs.append(Log(player.x + TILE_SIZE, player.y, 1))
-            elif event.key == pygame.K_o:  # Increase knots speed
-                knots_speed += 1
-            elif event.key == pygame.K_p:  # Decrease knots speed
-                knots_speed = max(0, knots_speed - 1)  # Ensure it doesn't go below 0
-        # Separate MOUSEBUTTONDOWN handling
-        elif event.type == pygame.MOUSEBUTTONDOWN:
-            mouse_x, mouse_y = event.pos
-            player.handle_mouse_click(mouse_x, mouse_y)
-            for log in logs:
-                # Check if the click is on the add_tile and the log has an empty spot
-                if log.has_empty_spot and log.x <= mouse_x <= log.x + TILE_SIZE and log.y - TILE_SIZE <= mouse_y <= log.y:
-                    if log.x == player.x and log.y == player.y:  # Ensure the player is on the log
-                        place_structure_on_log(log)
-                        break
+                    # Check if the click is on the add_tile and the log has an empty spot
+                    if log.has_empty_spot and log.x <= mouse_x <= log.x + TILE_SIZE and log.y - TILE_SIZE <= mouse_y <= log.y:
+                        if log.x == player.x and log.y == player.y:  # Ensure the player is on the log
+                            place_structure_on_log(log)
+                            break
     
     distance_meter += knots_speed
 
@@ -763,6 +805,9 @@ while running:
                     sails.remove(sail)
                     knots_speed -= 1  # Decrease knots speed when the sail is removed
 
+    # Ensure the add_tile is drawn in the main game loop
+    draw_add_tile()
+
     # Draw all barrels
     for barrel in barrels:
         barrel.draw()
@@ -773,10 +818,10 @@ while running:
         sail.draw()
 
     # Update and draw the player
-    if player.update(logs):
-        player = None  # Delete the player if they fall off the log
     if player:
         player.draw()
+        if player.update(logs):
+            player = None  # Delete the player if they fall off the log        
 
     # Drawing the distance travelled at the top right corner
     font = pygame.font.SysFont(None, 24)
