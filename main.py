@@ -481,7 +481,31 @@ class Sail:
         self.x = x
         self.y = y
         self.log = log
-        self.sprite = pygame.image.load("Assets/sail.png").convert_alpha()
+        self.frame = 0  # Current frame of the animation
+        self.animation_speed = 5  # Control the speed of the animation (adjust as needed)
+        self.animation_counter = 0  # Counts the frames for timing the animation
+
+        # Load the sail animation frames
+        self.sail_frames = [
+            pygame.image.load(f"Assets/Animations/Sail/sail_animated{i}.png").convert_alpha()
+            for i in range(1, 9)
+        ]
+        self.sprite = self.sail_frames[0]
+
+        # Boolean to check if animation is done
+        self.animation_done = False
+
+    def update(self):
+        if not self.animation_done:
+            self.animation_counter += 1
+            if self.animation_counter >= self.animation_speed:
+                self.frame += 1
+                if self.frame < len(self.sail_frames):
+                    self.sprite = self.sail_frames[self.frame]
+                else:
+                    self.sprite = self.sail_frames[-1]  # Stay on the last frame
+                    self.animation_done = True
+                self.animation_counter = 0
 
     def draw(self):
         screen.blit(self.sprite, (self.x, self.y))
@@ -731,6 +755,7 @@ while running:
 
     # Draw all sails
     for sail in sails:
+        sail.update()
         sail.draw()
 
     # Update and draw the player
