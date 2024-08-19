@@ -61,6 +61,7 @@ barrel_tile = pygame.image.load("Assets/barrel.png").convert()
 add_tile = pygame.image.load("Assets/add.png").convert()
 menu_image = pygame.image.load("Assets/menu.png").convert()
 water_splash_tile = pygame.image.load("Assets/water_splash.png").convert()
+auto_fisher_tile = pygame.image.load("Assets/autofishin.png").convert()
 
 #Load log images
 log_back_images = [
@@ -96,6 +97,7 @@ barrel_tile.set_colorkey((0, 0, 0))
 add_tile.set_colorkey((0, 0, 0))
 menu_image.set_colorkey((0, 0, 0))
 water_splash_tile.set_colorkey((0, 0, 0))
+auto_fisher_tile.set_colorkey((0, 0, 0))
 
 # Resources
 class Resource:
@@ -601,9 +603,46 @@ class Sail:
     def draw(self):
         screen.blit(self.sprite, (self.x, self.y))
 
+class AutoFisher:
+    def __init__(self, x, y, log, sprite):
+        self.x = x
+        self.y = y
+        self.log = log
+        self.sprite = sprite
+        self.resource_type = None
+        self.caught_fish = None
+        self.catch_timer = 0
+        self.catch_interval = random.randint(5, 6)  # Catch a fish every 5-6 seconds
+
+    def select_resource(self, resource_type):
+        self.resource_type = resource_type
+
+    def update(self):
+        # Only start catching fish if a resource type is selected
+        if self.resource_type:
+            self.catch_timer += 1
+            if self.catch_timer >= self.catch_interval * 10:  # Multiply by 10 for a reasonable in-game time
+                if self.caught_fish is None:
+                    self.caught_fish = self.resource_type
+                    self.catch_timer = 0
+
+    def draw(self):
+        screen.blit(self.sprite, (self.x, self.y))
+        if self.caught_fish == "wood":
+            screen.blit(wood_tile, (self.x, self.y))
+        elif self.caught_fish == "metal":
+            screen.blit(metal_tile, (self.x, self.y))
+
+    def on_click(self):
+        if self.caught_fish == "wood":
+            wood.add_stock(1)
+        elif self.caught_fish == "metal":
+            metal.add_stock(1)
+        self.caught_fish = None
+
 def show_build_selection_menu():
     # Draw the menu background
-    menu_width, menu_height = 200, 100
+    menu_width, menu_height = 200, 150  # Increased height to accommodate the third option
     menu_x = SCREEN_WIDTH // 2 - menu_width // 2
     menu_y = SCREEN_HEIGHT // 2 - menu_height // 2
     pygame.draw.rect(screen, (0, 0, 0), (menu_x, menu_y, menu_width, menu_height))
@@ -612,9 +651,11 @@ def show_build_selection_menu():
     font = pygame.font.SysFont(None, 24)
     barrel_option = font.render("Build Barrel", True, (255, 255, 255))
     sail_option = font.render("Build Sail", True, (255, 255, 255))
-    
+    auto_fisher_option = font.render("Build Auto Fisher", True, (255, 255, 255))
+
     screen.blit(barrel_option, (menu_x + 20, menu_y + 20))
     screen.blit(sail_option, (menu_x + 20, menu_y + 60))
+    screen.blit(auto_fisher_option, (menu_x + 20, menu_y + 100))
 
     # Refresh display to show the menu
     pygame.display.flip()
@@ -632,6 +673,8 @@ def show_build_selection_menu():
                         return "barrel"
                     elif menu_y + 40 < mouse_y < menu_y + 80:
                         return "sail"
+                    elif menu_y + 80 < mouse_y < menu_y + 120:
+                        return "auto_fisher"
 
 def place_structure_on_log(log):
     global knots_speed
@@ -659,6 +702,13 @@ def place_structure_on_log(log):
         log.has_empty_spot = False  # Mark the spot as used
         knots_speed += 1  # Increase knots speed
         # (You can add a sound effect for placing the sail here if desired)
+
+    elif build_choice == "auto_fisher":
+        selected_resource = show_resource_selection_menu()
+        auto_fisher = AutoFisher(log.x, log.y - TILE_SIZE, log, auto_fisher_tile)
+        auto_fisher.select_resource(selected_resource)
+        auto_fishers.append(auto_fisher)
+        log.has_empty_spot = False
 
 def show_resource_selection_menu():
     # Draw the menu background
@@ -773,6 +823,7 @@ def restart_game():
     logs = []
     barrels = []
     sails = []
+    auto_fishers = []
     knots_speed = 0
     distance_travelled = 0
     distance_meter = 0
@@ -793,7 +844,8 @@ def restart_game():
 running = True
 logs = []
 barrels = []
-sails = []  # List to store all sails
+sails = []
+auto_fishers = []
 # Initialize background tiles
 # Load images for background animation
 background_frames = [
@@ -867,6 +919,9 @@ while running:
                         if log.x == player.x and log.y == player.y:  # Ensure the player is on the log
                             place_structure_on_log(log)
                             break
+                for auto_fisher in auto_fishers:
+                    if auto_fisher.x <= mouse_x <= auto_fisher.x + TILE_SIZE and auto_fisher.y <= mouse_y <= auto_fisher.y + TILE_SIZE:
+                        auto_fisher.on_click()
         else:
             # New event handling when the player does not exist
             if event.type == pygame.MOUSEBUTTONDOWN and menu_landed:
@@ -943,6 +998,11 @@ while running:
     for sail in sails:
         sail.update()
         sail.draw()
+
+    # Update and draw all AutoFishers
+    for auto_fisher in auto_fishers:
+        auto_fisher.update()
+        auto_fisher.draw()
 
     # Update and draw the player
     if player:
