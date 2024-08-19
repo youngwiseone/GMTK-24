@@ -634,10 +634,11 @@ class AutoFisher:
             screen.blit(metal_tile, (self.x, self.y))
 
     def on_click(self):
+        resource_amount = 1 + sea_level  # Increase the resource amount based on the sea level
         if self.caught_fish == "wood":
-            wood.add_stock(1)
+            wood.add_stock(resource_amount)
         elif self.caught_fish == "metal":
-            metal.add_stock(1)
+            metal.add_stock(resource_amount)
         self.caught_fish = None
 
 def show_build_selection_menu():
