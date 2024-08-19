@@ -721,6 +721,37 @@ def draw_overlay(screen, sea_level):
     # Blit the overlay on the screen
     screen.blit(overlay, (0, 0))
 
+def create_background_surface(background_frames, screen_width, screen_height):
+    """Combine background tiles into a single surface."""
+    background_surface = pygame.Surface((screen_width, screen_height))
+    tile_width, tile_height = background_frames[0].get_size()
+    rows = screen_height // tile_height + 1
+    cols = screen_width // tile_width + 1
+
+    for row in range(rows):
+        for col in range(cols):
+            tile_x = col * tile_width
+            tile_y = row * tile_height
+            background_surface.blit(background_frames[0], (tile_x, tile_y))  # Start with the first frame
+
+    return background_surface
+
+def scroll_background(screen, background_surface, background_offset, scroll_speed):
+    """Scroll the background surface."""
+    background_width = background_surface.get_width()
+    # Move the background
+    background_offset -= scroll_speed
+
+    # If the background has scrolled off the screen, reset it
+    if background_offset <= -background_width:
+        background_offset = 0
+
+    # Draw the background twice to create a continuous scroll effect
+    screen.blit(background_surface, (background_offset, 0))
+    screen.blit(background_surface, (background_offset + background_width, 0))
+
+    return background_offset
+
 def load_hiscore():
     try:
         with open("hiscore.txt", "r") as file:
@@ -779,6 +810,10 @@ background_tiles = []
 for row in range(ROWS):
     for col in range(COLS):
         background_tiles.append(pygame.Rect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE))
+
+# Initialize the background surface
+    background_surface = create_background_surface(background_frames, SCREEN_WIDTH, SCREEN_HEIGHT)
+    background_offset = 0  # This will track the scroll position
 
 # Update the background speed
 background_speed = knots_speed
@@ -867,29 +902,8 @@ while running:
     # Update the background speed
     background_speed = knots_speed
 
-    # Update background animation
-    background_frame_timer += 1
-    if background_frame_timer >= background_animation_speed:
-        current_background_frame = (current_background_frame + 1) % background_frame_count
-        background_frame_timer = 0
-    
-    # Move background tiles
-    if background_moving:
-        for tile in background_tiles:
-            tile.x -= background_speed
-
-        # Remove tiles that move off the screen
-        background_tiles = [tile for tile in background_tiles if tile.x + TILE_SIZE > 0]
-
-        # Spawn new tiles on the right side
-        last_col_x = max(tile.x for tile in background_tiles) + TILE_SIZE
-        if len([tile for tile in background_tiles if tile.x == last_col_x]) < ROWS:
-            for row in range(ROWS):
-                background_tiles.append(pygame.Rect(last_col_x, row * TILE_SIZE, TILE_SIZE, TILE_SIZE))
-
-    # Draw the background tiles with the current frame
-    for tile in background_tiles:
-        screen.blit(background_frames[current_background_frame], tile)
+    # In the main game loop:
+    background_offset = scroll_background(screen, background_surface, background_offset, background_speed)
 
     draw_overlay(screen, sea_level)
 
