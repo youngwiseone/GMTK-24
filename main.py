@@ -707,6 +707,20 @@ def draw_menu_with_distance():
     screen.blit(distance_text, distance_text_rect)
     screen.blit(hiscore_text, hiscore_text_rect)
 
+def draw_overlay(screen, sea_level):
+    """Draw a dark blue overlay that increases in opacity with the sea level."""
+    # Calculate the alpha value based on sea level
+    max_sea_level = 10  # Adjust as needed
+    alpha = min(int(255 * (0.1 * sea_level / max_sea_level)), 25)  # Max 10% opacity (25/255)
+    
+    # Create a surface with the same size as the screen
+    overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+    overlay.set_alpha(alpha)  # Set the alpha transparency level
+    overlay.fill((0, 0, 50))  # Fill with a dark blue color (RGB: 0, 0, 139)
+    
+    # Blit the overlay on the screen
+    screen.blit(overlay, (0, 0))
+
 def load_hiscore():
     try:
         with open("hiscore.txt", "r") as file:
@@ -722,7 +736,7 @@ def save_hiscore(score):
         file.write(str(score))
                     
 def restart_game():
-    global player, logs, barrels, sails, knots_speed, distance_travelled, distance_meter, menu_falling, menu_landed, menu_y
+    global player, logs, barrels, sails, knots_speed, distance_travelled, distance_meter, menu_falling, menu_landed, menu_y, sea_level
 
     # Reset the game state
     logs = []
@@ -731,6 +745,7 @@ def restart_game():
     knots_speed = 0
     distance_travelled = 0
     distance_meter = 0
+    sea_level = 0
     menu_falling = False
     menu_landed = False
     menu_y = -320  # Reset menu position
@@ -875,6 +890,8 @@ while running:
     # Draw the background tiles with the current frame
     for tile in background_tiles:
         screen.blit(background_frames[current_background_frame], tile)
+
+    draw_overlay(screen, sea_level)
 
     # Draw the resource
     wood.draw()
