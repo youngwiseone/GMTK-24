@@ -24,6 +24,7 @@ menu_falling = False  # Track if the menu is falling
 menu_landed = False  # Track if the menu has landed
 menu_fall_speed = 80  # Speed of the menu falling
 
+sea_level = 0  # Initialize sea level
 knots_speed = 0  # Initial speed
 distance_travelled = 0  # Distance travelled in meters
 distance_meter = 0  # Used to accumulate knot distance until a meter is achieved
@@ -201,6 +202,8 @@ class Log:
                 screen.blit(add_tile, (self.x, self.y - TILE_SIZE))
 
     def update(self, logs):
+        damage = (sea_level + knots_speed) / 10  # Adjust the divisor to control how fast the logs break
+
         # Check if there are logs on both sides
         has_left_log = any(log.x == self.x - TILE_SIZE and log.y == self.y for log in logs)
         has_right_log = any(log.x == self.x + TILE_SIZE and log.y == self.y for log in logs)
@@ -213,7 +216,7 @@ class Log:
         else:
             # Only decrease health if there isn't a log on both sides
             if not(has_left_log and has_right_log):
-                self.health -= 1*knots_speed
+                self.health -= damage
 
         # Ensure health doesn't go below 0
         if self.health < 0:
@@ -385,7 +388,7 @@ class Player:
         self.target_x = None
         self.start_x = None
         self.progress = 0
-        self.speed = 0.4  # Speed attribute for sliding
+        self.speed = 0.8  # Speed attribute for sliding
         self.bobber = None  # Bobber attribute
 
         # Load animation frames
@@ -409,6 +412,12 @@ class Player:
             self.is_fishing = False
             self.current_frame = 0
 
+        # Cancel the current slide and snap to the target log
+        if self.target_x is not None:
+            # Snap the player to the current target position before moving again
+            self.x = self.target_x
+            self.target_x = None
+
         # Calculate the new position
         if direction == "left":
             new_x = self.x - TILE_SIZE
@@ -420,8 +429,11 @@ class Player:
         # Check if there is a log at the new position
         if self.can_stand_on_log(new_x, logs):
             self.start_x = self.x  # Record the starting x position
-            self.target_x = new_x  # Set the target x position
+            self.target_x = new_x  # Set the new target x position
             self.progress = 0
+        else:
+            self.current_frame = 0
+
 
     def can_stand_on_log(self, x, logs):
         # Check if there is a log at the given x coordinate and current y
@@ -467,15 +479,15 @@ class Player:
         if self.target_x is None:
             return
         self.bobber = False
-        self.progress += self.speed  # Increase progress based on speed
+        self.progress += 0.4 # Increase progress based on speed
 
         # Apply easing (quadratic easing)
         easing_progress = self.ease_in_out(self.progress)
 
         # Interpolate the x position
         self.x = self.start_x + (self.target_x - self.start_x) * easing_progress
-        
-        # Update the calculation of the current animation frame in the perform_slide method
+
+        # Update the current animation frame
         self.current_frame = int(self.progress * self.frame_count) % self.frame_count
 
         # End the slide when progress is complete
@@ -832,6 +844,10 @@ while running:
         meters_to_add = distance_meter // METER_DISTANCE_PER_KNOT  # Calculate full meters to add
         distance_travelled += meters_to_add
         distance_meter %= METER_DISTANCE_PER_KNOT  # Carry over the remainder
+        # Update sea level every 50 meters
+        if distance_travelled // 50 > sea_level:
+            sea_level = distance_travelled // 50
+
 
     # Update the background speed
     background_speed = knots_speed
@@ -907,6 +923,13 @@ while running:
     font = pygame.font.SysFont(None, 24)
     distance_text = font.render(f"Distance: {distance_travelled} m", True, (255, 255, 255))
     screen.blit(distance_text, (SCREEN_WIDTH - 150, 10))
+    # Drawing the knots speed just below the distance text
+    knots_speed_text = font.render(f"Speed: {knots_speed} knots", True, (255, 255, 255))
+    screen.blit(knots_speed_text, (SCREEN_WIDTH - 150, 40))
+    # Drawing the sea level just below the knots speed text
+    sea_level_text = font.render(f"Sea Level: {sea_level}", True, (255, 255, 255))
+    screen.blit(sea_level_text, (SCREEN_WIDTH - 150, 70))  # Positioned 30 pixels below the knots_speed_text
+
 
     if player == None:
         if distance_travelled > hiscore:
