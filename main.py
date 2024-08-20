@@ -349,9 +349,9 @@ class Bobber:
             self.state = "finished"
             # Add the corresponding resource to the player's inventory
             if self.caught_fish == "wood":
-                wood.add_stock(5)
+                wood.add_stock(5 + (sea_level*2))
             elif self.caught_fish == "metal":
-                metal.add_stock(5)
+                metal.add_stock(5 + (sea_level*2))
             player.complete_fishing()
 
     def select_fish(self):
@@ -613,6 +613,8 @@ class AutoFisher:
         self.caught_fish = None
         self.catch_timer = 0
         self.catch_interval = random.randint(5, 6)  # Catch a fish every 5-6 seconds
+        self.wood_fish_image = pygame.image.load("Assets/woodfish.png").convert_alpha()
+        self.iron_fish_image = pygame.image.load("Assets/ironfish.png").convert_alpha()
 
     def select_resource(self, resource_type):
         self.resource_type = resource_type
@@ -629,9 +631,9 @@ class AutoFisher:
     def draw(self):
         screen.blit(self.sprite, (self.x, self.y))
         if self.caught_fish == "wood":
-            screen.blit(wood_tile, (self.x, self.y))
+            screen.blit(self.wood_fish_image, (self.x, self.y))
         elif self.caught_fish == "metal":
-            screen.blit(metal_tile, (self.x, self.y))
+            screen.blit(self.iron_fish_image, (self.x, self.y))
 
     def on_click(self):
         resource_amount = 1 + sea_level  # Increase the resource amount based on the sea level
@@ -720,8 +722,8 @@ def show_resource_selection_menu():
 
     # Draw the options
     font = pygame.font.SysFont(None, 24)
-    wood_option = font.render("Add 50 to Wood Max", True, (255, 255, 255))
-    metal_option = font.render("Add 50 to Metal Max", True, (255, 255, 255))
+    wood_option = font.render("Wood", True, (255, 255, 255))
+    metal_option = font.render("Metal", True, (255, 255, 255))
     
     screen.blit(wood_option, (menu_x + 20, menu_y + 20))
     screen.blit(metal_option, (menu_x + 20, menu_y + 60))
