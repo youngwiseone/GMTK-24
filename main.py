@@ -62,6 +62,7 @@ add_tile = pygame.image.load("Assets/add.png").convert()
 menu_image = pygame.image.load("Assets/menu.png").convert()
 water_splash_tile = pygame.image.load("Assets/water_splash.png").convert()
 auto_fisher_tile = pygame.image.load("Assets/autofishin.png").convert()
+repairer_tile = pygame.image.load("Assets/Animations/Repairer/repairer1.png").convert()
 
 #Load log images
 log_back_images = [
@@ -98,6 +99,7 @@ add_tile.set_colorkey((0, 0, 0))
 menu_image.set_colorkey((0, 0, 0))
 water_splash_tile.set_colorkey((0, 0, 0))
 auto_fisher_tile.set_colorkey((0, 0, 0))
+repairer_tile.set_colorkey((0, 0, 0))
 
 # Resources
 class Resource:
@@ -643,9 +645,60 @@ class AutoFisher:
             metal.add_stock(resource_amount)
         self.caught_fish = None
 
+class Repairer:
+    def __init__(self, x, y, log, sprite):
+        self.x = x
+        self.y = y + TILE_SIZE
+        self.log = log
+        self.sprite = sprite
+        self.repair_sprites = [
+            pygame.image.load("Assets/Animations/Repairer/repairer1.png").convert_alpha(),
+            pygame.image.load("Assets/Animations/Repairer/repairer2.png").convert_alpha(),
+            pygame.image.load("Assets/Animations/Repairer/repairer3.png").convert_alpha(),
+            pygame.image.load("Assets/Animations/Repairer/repairer4.png").convert_alpha()
+        ]
+        self.current_frame = 0
+        self.frame_count = len(self.repair_sprites)
+        self.animation_speed = 1  # Adjust for speed of animation
+        self.animation_timer = 0
+        self.repairing = False
+        self.waiting_for_next_repair = False  # New attribute to handle waiting between repairs
+
+    def update(self):
+        if self.log.health < self.log.max_health and metal.current_stock >= 5:
+            self.repairing = True
+            self.waiting_for_next_repair = False
+        else:
+            self.repairing = False
+            self.waiting_for_next_repair = False
+            self.current_frame = 0  # Reset to the first frame when not repairing
+
+    def animate_repair(self):
+        if self.repairing:
+            self.animation_timer += 1
+            if self.animation_timer >= self.animation_speed:
+                self.animation_timer = 0
+                self.current_frame = (self.current_frame + 1) % self.frame_count
+
+                # When the last frame is reached, perform the repair action
+                if self.current_frame == self.frame_count - 1:
+                    metal.remove_stock(5)
+                    self.log.restore_health(10)
+
+                    # Check if the log is fully repaired or no more metal is available
+                    if self.log.health >= self.log.max_health or metal.current_stock < 5:
+                        self.repairing = False
+                        self.current_frame = 0
+
+    def draw(self):
+        # Draw the current frame of the repair animation if repairing, otherwise draw the idle sprite
+        screen.blit(self.repair_sprites[self.current_frame], (self.x, self.y))
+
+
+
 def show_build_selection_menu():
     # Draw the menu background
-    menu_width, menu_height = 200, 150  # Increased height to accommodate the third option
+    menu_width, menu_height = 200, 200  # Increased height to accommodate the fourth option
     menu_x = SCREEN_WIDTH // 2 - menu_width // 2
     menu_y = SCREEN_HEIGHT // 2 - menu_height // 2
     pygame.draw.rect(screen, (0, 0, 0), (menu_x, menu_y, menu_width, menu_height))
@@ -655,10 +708,12 @@ def show_build_selection_menu():
     barrel_option = font.render("Build Barrel", True, (255, 255, 255))
     sail_option = font.render("Build Sail", True, (255, 255, 255))
     auto_fisher_option = font.render("Build Auto Fisher", True, (255, 255, 255))
+    repairer_option = font.render("Build Repairer", True, (255, 255, 255))
 
     screen.blit(barrel_option, (menu_x + 20, menu_y + 20))
     screen.blit(sail_option, (menu_x + 20, menu_y + 60))
     screen.blit(auto_fisher_option, (menu_x + 20, menu_y + 100))
+    screen.blit(repairer_option, (menu_x + 20, menu_y + 140))
 
     # Refresh display to show the menu
     pygame.display.flip()
@@ -678,6 +733,8 @@ def show_build_selection_menu():
                         return "sail"
                     elif menu_y + 80 < mouse_y < menu_y + 120:
                         return "auto_fisher"
+                    elif menu_y + 120 < mouse_y < menu_y + 160:
+                        return "repairer"
 
 def place_structure_on_log(log):
     global knots_speed
@@ -711,6 +768,10 @@ def place_structure_on_log(log):
         auto_fisher = AutoFisher(log.x, log.y - TILE_SIZE, log, auto_fisher_tile)
         auto_fisher.select_resource(selected_resource)
         auto_fishers.append(auto_fisher)
+        log.has_empty_spot = False
+
+    elif build_choice == "repairer":
+        repairers.append(Repairer(log.x, log.y - TILE_SIZE * 2, log, repairer_tile))
         log.has_empty_spot = False
 
 def show_resource_selection_menu():
@@ -820,12 +881,13 @@ def save_hiscore(score):
         file.write(str(score))
                     
 def restart_game():
-    global player, logs, barrels, sails, knots_speed, distance_travelled, distance_meter, menu_falling, menu_landed, menu_y, sea_level
+    global player, logs, barrels, sails, knots_speed, distance_travelled, distance_meter, menu_falling, menu_landed, menu_y, sea_level, repairers, auto_fishers
 
     # Reset the game state
     logs = []
     barrels = []
     sails = []
+    repairers = []
     auto_fishers = []
     knots_speed = 0
     distance_travelled = 0
@@ -849,6 +911,7 @@ logs = []
 barrels = []
 sails = []
 auto_fishers = []
+repairers = []
 # Initialize background tiles
 # Load images for background animation
 background_frames = [
@@ -989,6 +1052,12 @@ while running:
                 if sail.log == log:
                     sails.remove(sail)
                     knots_speed -= 1  # Decrease knots speed when the sail is removed
+            for auto_fisher in auto_fishers[:]:
+                if auto_fisher.log == log:
+                    auto_fishers.remove(auto_fisher)
+            for repairer in repairers[:]:
+                if repairer.log == log:
+                    repairers.remove(repairer)
 
     # Ensure the add_tile is drawn in the main game loop
     draw_add_tile()
@@ -1006,6 +1075,11 @@ while running:
     for auto_fisher in auto_fishers:
         auto_fisher.update()
         auto_fisher.draw()
+
+    for repairer in repairers:
+        repairer.update()
+        repairer.animate_repair()
+        repairer.draw()
 
     # Update and draw the player
     if player:
