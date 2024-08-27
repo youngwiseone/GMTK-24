@@ -17,7 +17,7 @@ LEVEL = 1
 STARTING_RESOURCES = 100
 METER_DISTANCE_PER_KNOT = 32
 
-menu_font = pygame.font.SysFont(None, 48)  # Adjust size as needed
+menu_font = pygame.font.SysFont(None, 40)  # Adjust size as needed
 menu_x = SCREEN_WIDTH // 2 - 160  # Center the menu horizontally
 menu_y = -320  # Start above the screen
 menu_falling = False  # Track if the menu is falling
@@ -118,10 +118,13 @@ class Resource:
         # Draw the resource count above the resource
         font = pygame.font.SysFont(None, 24)
         resource_text = font.render(f"{self.current_stock}/{self.max_stock}", True, (255, 255, 255))
-        screen.blit(resource_text, (self.x, self.y + TILE_SIZE))
+        screen.blit(resource_text, (self.x - TILE_SIZE/2, self.y + TILE_SIZE))
     
     def add_stock(self, amount):
         self.current_stock = min(self.current_stock + amount, self.max_stock)
+
+    def set_stock(self, amount):
+        self.current_stock = amount
 
     def remove_stock(self, amount):
         self.current_stock = max(self.current_stock - amount, 0)
@@ -623,7 +626,7 @@ class AutoFisher:
 
     def update(self):
         # Only start catching fish if a resource type is selected
-        if self.resource_type:
+        if self.resource_type and knots_speed != 0:
             self.catch_timer += 1
             if self.catch_timer >= self.catch_interval * 10:  # Multiply by 10 for a reasonable in-game time
                 if self.caught_fish is None:
@@ -810,10 +813,10 @@ def draw_menu_with_distance():
     # Render the distance text
     distance_number = str(int(distance_travelled))  # Convert the integer part to string
     distance_text = menu_font.render(distance_number, True, (255, 255, 255))  # White text
-    distance_text_rect = distance_text.get_rect(center=(menu_x + 220, menu_y + 80))
+    distance_text_rect = distance_text.get_rect(center=(menu_x + 230, menu_y + 80))
     # Render the high score text
     hiscore_text = menu_font.render(f"{hiscore}", True, (255, 255, 255))
-    hiscore_text_rect = hiscore_text.get_rect(center=(menu_x + 220, menu_y + 145))
+    hiscore_text_rect = hiscore_text.get_rect(center=(menu_x + 230, menu_y + 145))
 
     # Draw the menu image
     screen.blit(menu_image, (menu_x, menu_y))
@@ -896,6 +899,8 @@ def restart_game():
     menu_falling = False
     menu_landed = False
     menu_y = -320  # Reset menu position
+    wood.set_stock(STARTING_RESOURCES)
+    metal.set_stock(STARTING_RESOURCES)
 
     # Create and add 3 logs spaced horizontally
     logs.append(Log(center_x := (COLS // 2) * TILE_SIZE, center_y := (ROWS // 2) * TILE_SIZE, 4))
@@ -938,8 +943,8 @@ background_speed = knots_speed
 background_moving = True  # Track if the background is moving
 
 # Create resources
-wood = Resource("wood", SCREEN_WIDTH // 2 - TILE_SIZE, TILE_SIZE, STARTING_RESOURCES, 100, wood_tile)
-metal = Resource("metal", SCREEN_WIDTH // 2 + TILE_SIZE, TILE_SIZE, STARTING_RESOURCES, 100, metal_tile)
+wood = Resource("wood", SCREEN_WIDTH // 2 - TILE_SIZE - TILE_SIZE, TILE_SIZE, STARTING_RESOURCES, 100, wood_tile)
+metal = Resource("metal", SCREEN_WIDTH // 2 + TILE_SIZE + TILE_SIZE, TILE_SIZE, STARTING_RESOURCES, 100, metal_tile)
 
 # Create and add 3 logs spaced horizontally
 logs.append(Log(center_x := (COLS // 2) * TILE_SIZE, center_y := (ROWS // 2) * TILE_SIZE, 3))
